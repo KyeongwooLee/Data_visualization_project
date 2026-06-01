@@ -26,6 +26,15 @@ function App() {
     const [congestTooltip, setCongestTooltip] = useState(null); 
     const [geoJson, setGeoJson] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isCustomOpen, setIsCustomOpen] = useState(false);
+    const [customFilters, setCustomFilters] = useState({
+        date: '',
+        time: '',
+        temp: '',
+        line: 'All'
+    });
+    const [customResults, setCustomResults] = useState([]);
+    const [legendHighlight, setLegendHighlight] = useState(null);
 
     const lineColors = {
         "1호선": "#0052A4", "2호선": "#00A84D", "3호선": "#EF7C1C",
@@ -101,7 +110,7 @@ function App() {
         line: "6호선",
         color: "#CD7C2F",
         stations: [
-          { name: "응암", isTransfer: false, transferTo: [] }, { name: "역촌", isTransfer: false, transferTo: [] }, { name: "불광", isTransfer: true, transferTo: ["3호선"] }, { name: "독바위", isTransfer: false, transferTo: [] }, { name: "연신내", isTransfer: true, transferTo: ["3호선"] }, { name: "구산", isTransfer: false, transferTo: [] }, { name: "새절", isTransfer: false, transferTo: [] }, { name: "증산", isTransfer: false, transferTo: [] }, { name: "디지털미디어시티", isTransfer: false, transferTo: [] }, { name: "월드컵경기장", isTransfer: false, transferTo: [] }, { name: "마포구청", isTransfer: false, transferTo: [] }, { name: "망원", isTransfer: false, transferTo: [] }, { name: "합정", isTransfer: true, transferTo: ["2호선"] }, { name: "상수", isTransfer: false, transferTo: [] }, { name: "광흥창", isTransfer: false, transferTo: [] }, { name: "대흥", isTransfer: false, transferTo: [] }, { name: "공덕", isTransfer: true, transferTo: ["5호선"] }, { name: "효창공원앞", isTransfer: false, transferTo: [] }, { name: "삼각지", isTransfer: true, transferTo: ["4호선"] }, { name: "녹사평", isTransfer: false, transferTo: [] }, { name: "이태원", isTransfer: false, transferTo: [] }, { name: "한성대입구", isTransfer: false, transferTo: [] }, { name: "한강진", isTransfer: false, transferTo: [] }, { name: "버티고개", isTransfer: false, transferTo: [] }, { name: "약수", isTransfer: true, transferTo: ["3호선"] }, { name: "청구", isTransfer: true, transferTo: ["5호선"] }, { name: "신당", isTransfer: true, transferTo: ["2호선"] }, { name: "동묘앞", isTransfer: true, transferTo: ["1호선"] }, { name: "창신", isTransfer: false, transferTo: [] }, { name: "보문", isTransfer: false, transferTo: [] }, { name: "안암", isTransfer: false, transferTo: [] }, { name: "고려대", isTransfer: false, transferTo: [] }, { name: "월곡", isTransfer: false, transferTo: [] }, { name: "상월곡", isTransfer: false, transferTo: [] }, { name: "돌곶이", isTransfer: false, transferTo: [] }, { name: "석계", isTransfer: true, transferTo: ["1호선"] }, { name: "태릉입구", isTransfer: true, transferTo: ["7호선"] }, { name: "화랑대", isTransfer: false, transferTo: [] }, { name: "봉화산", isTransfer: false, transferTo: [] }, { name: "신내", isTransfer: false, transferTo: [] }
+          { name: "응암", isTransfer: false, transferTo: [] }, { name: "역촌", isTransfer: false, transferTo: [] }, { name: "불광", isTransfer: true, transferTo: ["3호선"] }, { name: "독바위", isTransfer: false, transferTo: [] }, { name: "연신내", isTransfer: true, transferTo: ["3호선"] }, { name: "구산", isTransfer: false, transferTo: [] }, { name: "새절", isTransfer: false, transferTo: [] }, { name: "증산", isTransfer: false, transferTo: [] }, { name: "디지털미디어시티", isTransfer: false, transferTo: [] }, { name: "월드컵경기장", isTransfer: false, transferTo: [] }, { name: "마포구청", isTransfer: false, transferTo: [] }, { name: "망원", isTransfer: false, transferTo: [] }, { name: "합정", isTransfer: true, transferTo: ["2호선"] }, { name: "상수", isTransfer: false, transferTo: [] }, { name: "광흥창", isTransfer: false, transferTo: [] }, { name: "대흥", isTransfer: false, transferTo: [] }, { name: "공덕", isTransfer: true, transferTo: ["5호선"] }, { name: "효창공원앞", isTransfer: false, transferTo: [] }, { name: "삼각지", isTransfer: true, transferTo: ["4호선"] }, { name: "녹사평", isTransfer: false, transferTo: [] }, { name: "이태원", isTransfer: false, transferTo: [] }, { name: "한강진", isTransfer: false, transferTo: [] }, { name: "버티고개", isTransfer: false, transferTo: [] }, { name: "약수", isTransfer: true, transferTo: ["3호선"] }, { name: "청구", isTransfer: true, transferTo: ["5호선"] }, { name: "신당", isTransfer: true, transferTo: ["2호선"] }, { name: "동묘앞", isTransfer: true, transferTo: ["1호선"] }, { name: "창신", isTransfer: false, transferTo: [] }, { name: "보문", isTransfer: false, transferTo: [] }, { name: "안암", isTransfer: false, transferTo: [] }, { name: "고려대", isTransfer: false, transferTo: [] }, { name: "월곡", isTransfer: false, transferTo: [] }, { name: "상월곡", isTransfer: false, transferTo: [] }, { name: "돌곶이", isTransfer: false, transferTo: [] }, { name: "석계", isTransfer: true, transferTo: ["1호선"] }, { name: "태릉입구", isTransfer: true, transferTo: ["7호선"] }, { name: "화랑대", isTransfer: false, transferTo: [] }, { name: "봉화산", isTransfer: false, transferTo: [] }, { name: "신내", isTransfer: false, transferTo: [] }
         ]
       },
       {
@@ -230,21 +239,34 @@ function App() {
     const getStationStyle = (s) => {
         const sCleanName = s.name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
         const isT = selectedLine === 'All' || (activeLineStationNames && activeLineStationNames.has(sCleanName));
-        let r = 1.05, c = "#ccff33"; 
+        let r = 1.05, c = "#ccff33", cat = ""; 
         if (viewMode === 'congestion') {
             const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
-            if (ratio > 0.7) c = "#ff4d4d"; else if (ratio > 0.4) c = "#b30000"; else if (ratio > 0.1) c = "#006400"; else c = "#ccff33";
+            if (ratio > 0.7) { c = "#ff4d4d"; cat = "crowded"; }
+            else if (ratio > 0.4) { c = "#b30000"; cat = "moderate"; }
+            else if (ratio > 0.1) { c = "#006400"; cat = "normal"; }
+            else { c = "#ccff33"; cat = "smooth"; }
         } else if (viewMode === 'inflowOutflow') {
             const diff = (s.hourly_inflow?.[currentTime] || 0) - (s.hourly_outflow?.[currentTime] || 0);
-            c = diff > 0 ? "rgba(230, 85, 13, 0.9)" : "rgba(49, 130, 189, 0.9)";
+            if (diff > 0) { c = "rgba(230, 85, 13, 0.9)"; cat = "inflow"; }
+            else { c = "rgba(49, 130, 189, 0.9)"; cat = "outflow"; }
         } else if (viewMode === 'train') {
             const satArr = Object.values(s.train_data || {}).map(v => Math.max(v.upper[currentTime], v.lower[currentTime]));
             const sat = satArr.length > 0 ? Math.max(...satArr) : 0;
-            if (sat > 150) c = "#8e44ad"; else if (sat > 100) c = "#e74c3c"; else if (sat > 50) c = "#e67e22"; else c = "#ccff33";
+            if (sat > 150) { c = "#8e44ad"; cat = "extreme"; }
+            else if (sat > 100) { c = "#e74c3c"; cat = "heavy"; }
+            else if (sat > 50) { c = "#e67e22"; cat = "normal"; }
+            else { c = "#ccff33"; cat = "smooth"; }
         } else { 
-            if (s.station_type === 'Business') c = "#e67e22"; else if (s.station_type === 'Residential') c = "#2ecc71"; else c = "#95a5a6"; 
+            if (s.station_type === 'Business') { c = "#e67e22"; cat = "business"; }
+            else if (s.station_type === 'Residential') { c = "#2ecc71"; cat = "residential"; }
+            else { c = "#95a5a6"; cat = "mixed"; }
         }
-        return { radius: r, color: c, opacity: isT ? 1 : 0.05, interactive: isT };
+
+        const isLegendHighlighted = legendHighlight === cat;
+        if (isLegendHighlighted) r *= 1.3;
+
+        return { radius: r, color: c, opacity: isT ? 1 : 0.05, interactive: isT, category: cat, isLegendHighlighted };
     };
 
     const maxCurrentRatio = stations.length > 0 ? Math.max(...stations.map(s => (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion)) : 0;
@@ -256,6 +278,48 @@ function App() {
     const formatNum = (n) => new Intl.NumberFormat().format(Math.round(n));
     const dayInfo = currentDay || { hourly_weather: new Array(24).fill({temp:0, condition:'Clear'}) };
     const currentWeather = dayInfo.hourly_weather[currentTime] || {temp: 0, condition: 'Clear'};
+
+    // Custom filtering logic moved after dayInfo definition
+    useEffect(() => {
+        if (!isCustomOpen) return;
+        
+        let results = [];
+        const targetTemp = parseFloat(customFilters.temp);
+        const targetTime = customFilters.time !== '' ? parseInt(customFilters.time) : null;
+        const targetLine = customFilters.line;
+
+        let matchingHours = [];
+        if (dayInfo && dayInfo.hourly_weather) {
+            dayInfo.hourly_weather.forEach((w, h) => {
+                let match = true;
+                if (targetTime !== null && h !== targetTime) match = false;
+                if (!isNaN(targetTemp)) {
+                    const baseTemp = Math.floor(targetTemp);
+                    if (w.temp < baseTemp || w.temp >= baseTemp + 1) match = false;
+                }
+                if (match) matchingHours.push(h);
+            });
+        }
+
+        if (matchingHours.length > 0) {
+            stations.forEach(s => {
+                const sLines = s.lines || [];
+                const lineMatch = targetLine === 'All' || sLines.some(l => l.includes(targetLine));
+                if (lineMatch) {
+                    matchingHours.forEach(hour => {
+                        results.push({
+                            ...s,
+                            matchingHour: hour,
+                            uniqueId: `${s.id}-${hour}`
+                        });
+                    });
+                }
+            });
+            setCustomResults(results);
+        } else {
+            setCustomResults([]);
+        }
+    }, [customFilters, stations, dayInfo, isCustomOpen]);
 
     const getBehavior = (s) => {
         const getF = (h1, h2) => {
@@ -281,10 +345,53 @@ function App() {
             <header className="header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
                 <div className="logo-title" style={{ flex: '1' }}><h1>Seoul Subway Population Movement Flow</h1></div>
                 <div className="search-wrapper" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
-                    <div className="search-container" style={{ display: 'flex', alignItems: 'center', background: '#fff', padding: '6px 15px', borderRadius: '20px', border: '2px solid #000' }}>
+                    <div className="search-container" style={{ display: 'flex', alignItems: 'center', background: '#fff', padding: '6px 15px', borderRadius: '20px', border: '2px solid #000', gap: '10px' }}>
                         <input type="text" placeholder="역 이름 검색 (예: 강남)" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeSearch()} style={{ background: 'transparent', border: 'none', color: '#000', outline: 'none', width: '200px', fontSize: '14px' }} />
-                        <span style={{ cursor: 'pointer', marginLeft: '8px', color: '#000' }} onClick={executeSearch}>🔍</span>
+                        <span style={{ cursor: 'pointer', color: '#000' }} onClick={executeSearch}>🔍</span>
+                        <div style={{ width: '1px', height: '20px', background: '#ddd' }}></div>
+                        <button className={`custom-toggle-btn ${isCustomOpen ? 'active' : ''}`} onClick={() => setIsCustomOpen(!isCustomOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', color: isCustomOpen ? '#007aff' : '#666' }}>Custom</button>
                     </div>
+
+                    {isCustomOpen && (
+                        <div className="custom-filter-panel" style={{ position: 'absolute', top: '50px', left: '50%', transform: 'translateX(-50%)', background: '#fff', padding: '20px', borderRadius: '15px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #eee', width: '450px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+                                <div className="filter-group">
+                                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7f8c8d', display: 'block', marginBottom: '5px' }}>Date</label>
+                                    <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                </div>
+                                <div className="filter-group">
+                                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7f8c8d', display: 'block', marginBottom: '5px' }}>Time (0-23)</label>
+                                    <input type="number" min="0" max="23" placeholder="All" value={customFilters.time} onChange={e => setCustomFilters({...customFilters, time: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                </div>
+                                <div className="filter-group">
+                                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7f8c8d', display: 'block', marginBottom: '5px' }}>Temperature (°C)</label>
+                                    <input type="number" placeholder="Enter Temp" value={customFilters.temp} onChange={e => setCustomFilters({...customFilters, temp: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }} />
+                                </div>
+                                <div className="filter-group">
+                                    <label style={{ fontSize: '11px', fontWeight: 'bold', color: '#7f8c8d', display: 'block', marginBottom: '5px' }}>Line</label>
+                                    <select value={customFilters.line} onChange={e => setCustomFilters({...customFilters, line: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #ddd' }}>
+                                        <option value="All">All Lines</option>
+                                        {[1,2,3,4,5,6,7,8,9].map(n => <option key={n} value={`${n}호선`}>{n}호선</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="custom-results-list" style={{ maxHeight: '200px', overflowY: 'auto', borderTop: '1px solid #eee', paddingTop: '10px' }}>
+                                <h4 style={{ fontSize: '12px', color: '#7f8c8d', marginBottom: '8px' }}>Matching Stations ({customResults.length})</h4>
+                                {customResults.length > 0 ? (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+                                        {customResults.map(s => (
+                                            <div key={s.uniqueId} className="result-item" onClick={() => { setSelectedStation(s); setCurrentTime(s.matchingHour); }} style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', background: (selectedStation?.id === s.id && currentTime === s.matchingHour) ? '#f0f7ff' : '#f8f9fa', border: (selectedStation?.id === s.id && currentTime === s.matchingHour) ? '1px solid #007aff' : '1px solid transparent' }}>
+                                                {s.name} <span style={{ fontSize: '10px', color: '#666' }}>({s.lines?.[0]})</span> <span style={{ fontSize: '10px', color: '#007aff', fontWeight: 'bold' }}>{s.matchingHour}h</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '20px 0' }}>No stations match these filters.</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className="header-right" style={{ flex: '1', textAlign: 'right' }}></div>
             </header>
@@ -311,7 +418,7 @@ function App() {
                             <div className="zoom-controls" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => handleZoom(0.7)}>+</button><button onClick={() => handleZoom(1.4)}>-</button><button onClick={resetZoom}>⟲</button>
                             </div>
-                            <svg width="100%" height="100%" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" onClick={() => setSelectedStation(null)}>
+                            <svg width="100%" height="100%" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" onClick={() => { setSelectedStation(null); setLegendHighlight(null); }}>
                                 <rect x="-1000" y="-1000" width="2000" height="2000" fill="#e4f1fe" />
                                 {geoPaths}
                                 {subwayPaths.map(p => {
@@ -323,7 +430,7 @@ function App() {
                                     const st = getStationStyle(s); const r = st.radius * zoomScale;
                                     const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
                                     const isAutoHighlighted = viewMode === 'congestion' && ((activeHighlightTier === 'crowded' && ratio > 0.7) || (activeHighlightTier === 'moderate' && ratio > 0.4 && ratio <= 0.7));
-                                    const shouldShowLabel = (selectedLine !== 'All' && st.interactive) || isAutoHighlighted;
+                                    const shouldShowLabel = (selectedLine !== 'All' && st.interactive) || isAutoHighlighted || st.isLegendHighlighted;
                                     const [cx, cy] = projection([s.x, s.y]);
                                     return (
                                         <g key={s.id} opacity={st.opacity} style={{ pointerEvents: st.interactive ? 'auto' : 'none' }}>
@@ -332,17 +439,25 @@ function App() {
                                         </g>
                                     );
                                 })}
-                                {[hoveredStation, selectedStation].map((s, i) => {
-                                    if (!s || !projection) return null; const st = getStationStyle(s), isS = i === 1;
-                                    const r = (isS ? st.radius * 2 : st.radius * 1.5) * zoomScale;
-                                    const [cx, cy] = projection([s.x, s.y]);
-                                    return (
-                                        <g key={`top-${i}`} opacity={1} style={{ pointerEvents: 'auto' }}>
-                                            <circle cx={cx} cy={cy} r={r} fill={st.color} stroke="#000" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
-                                            <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
-                                        </g>
-                                    );
-                                })}
+                                {(() => {
+                                    const items = [];
+                                    if (selectedStation) items.push({ s: selectedStation, isSelected: true });
+                                    if (hoveredStation && (!selectedStation || hoveredStation.id !== selectedStation.id)) {
+                                        items.push({ s: hoveredStation, isSelected: false });
+                                    }
+                                    return items.map(({ s, isSelected }) => {
+                                        if (!s || !projection) return null; 
+                                        const st = getStationStyle(s);
+                                        const r = (isSelected ? st.radius * 2 : st.radius * 1.5) * zoomScale;
+                                        const [cx, cy] = projection([s.x, s.y]);
+                                        return (
+                                            <g key={isSelected ? 'selected' : 'hovered'} opacity={1} style={{ pointerEvents: 'auto' }}>
+                                                <circle cx={cx} cy={cy} r={r} fill={st.color} stroke="#000" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
+                                                <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
+                                            </g>
+                                        );
+                                    });
+                                })()}
                             </svg>
                             <div className="context-overlay" onClick={e => e.stopPropagation()}>
                                 <div className="weather-info">🗓️ {selectedDate} ({String(currentTime).padStart(2, '0')}:00)</div>
@@ -351,13 +466,56 @@ function App() {
                             <div className="map-legend" onClick={e => e.stopPropagation()}>
                                 <span className="legend-title">{viewMode.toUpperCase()} %</span>
                                 {viewMode === 'congestion' ? (
-                                    <><div className="legend-item"><div className="color-box" style={{backgroundColor: '#ff4d4d'}}></div><span>Crowded (70%+)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#b30000'}}></div><span>Moderate (40~70%)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#006400'}}></div><span>Normal (10~40%)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#ccff33'}}></div><span>Smooth (0~10%)</span></div></>
+                                    <>
+                                        <div className={`legend-item ${legendHighlight === 'crowded' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'crowded' ? null : 'crowded')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'crowded' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#ff4d4d'}}></div><span>Crowded (70%+)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'moderate' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'moderate' ? null : 'moderate')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'moderate' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#b30000'}}></div><span>Moderate (40~70%)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'normal' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'normal' ? null : 'normal')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'normal' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#006400'}}></div><span>Normal (10~40%)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'smooth' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'smooth' ? null : 'smooth')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'smooth' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#ccff33'}}></div><span>Smooth (0~10%)</span>
+                                        </div>
+                                    </>
                                 ) : viewMode === 'train' ? (
-                                    <><div className="legend-item"><div className="color-box" style={{backgroundColor: '#8e44ad'}}></div><span>Extreme (150%+)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#e74c3c'}}></div><span>Heavy (100~150%)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#e67e22'}}></div><span>Normal (50~100%)</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#2ecc71'}}></div><span>Smooth (~50%)</span></div></>
+                                    <>
+                                        <div className={`legend-item ${legendHighlight === 'extreme' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'extreme' ? null : 'extreme')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'extreme' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#8e44ad'}}></div><span>Extreme (150%+)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'heavy' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'heavy' ? null : 'heavy')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'heavy' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#e74c3c'}}></div><span>Heavy (100~150%)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'normal' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'normal' ? null : 'normal')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'normal' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#e67e22'}}></div><span>Normal (50~100%)</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'smooth' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'smooth' ? null : 'smooth')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'smooth' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#ccff33'}}></div><span>Smooth (~50%)</span>
+                                        </div>
+                                    </>
                                 ) : viewMode === 'inflowOutflow' ? (
-                                    <><div className="legend-item"><div className="color-box" style={{backgroundColor: '#e6550d'}}></div><span>Inflow</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#3182bd'}}></div><span>Outflow</span></div></>
+                                    <>
+                                        <div className={`legend-item ${legendHighlight === 'inflow' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'inflow' ? null : 'inflow')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'inflow' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#e6550d'}}></div><span>Inflow</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'outflow' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'outflow' ? null : 'outflow')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'outflow' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#3182bd'}}></div><span>Outflow</span>
+                                        </div>
+                                    </>
                                 ) : (
-                                    <><div className="legend-item"><div className="color-box" style={{backgroundColor: '#e67e22'}}></div><span>Business Area</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#2ecc71'}}></div><span>Residential Area</span></div><div className="legend-item"><div className="color-box" style={{backgroundColor: '#95a5a6'}}></div><span>Mixed Zone</span></div></>
+                                    <>
+                                        <div className={`legend-item ${legendHighlight === 'business' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'business' ? null : 'business')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'business' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#e67e22'}}></div><span>Business Area</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'residential' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'residential' ? null : 'residential')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'residential' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#2ecc71'}}></div><span>Residential Area</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'mixed' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'mixed' ? null : 'mixed')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'mixed' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: '#95a5a6'}}></div><span>Mixed Zone</span>
+                                        </div>
+                                    </>
                                 )}
                             </div>
                             {selectedStation && (

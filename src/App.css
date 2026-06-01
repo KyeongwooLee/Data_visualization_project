@@ -392,3 +392,36 @@ input[type="range"] { width: 100%; accent-color: #2c3e50; cursor: pointer; }
     height: 100%; color: #bdc3c7; text-align: center; 
 }
 .empty-icon { font-size: 60px; margin-bottom: 10px; opacity: 0.3; }
+
+/* Custom Search Results Styles */
+.result-item:hover {
+    background-color: #eef6ff !important;
+    border-color: #007aff !important;
+    transition: all 0.2s ease;
+}
+
+.custom-toggle-btn:hover {
+    opacity: 0.8;
+}
+
+.custom-filter-panel {
+    z-index: 1000;
+}
+
+.custom-results-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-results-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.custom-results-list::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 10px;
+}
+
+.custom-results-list::-webkit-scrollbar-thumb:hover {
+    background: #999;
+}
