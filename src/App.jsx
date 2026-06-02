@@ -1,16 +1,460 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Component, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as d3 from 'd3';
 import './App.css';
+
+const NAVER_MAP_CLIENT_ID = (import.meta.env.VITE_NAVER_MAP_KEY || import.meta.env.MAP_API || '').trim();
+const NAVER_MAP_RUNTIME_ENABLED = ['1', 'true', 'yes'].includes(
+    String(import.meta.env.VITE_NAVER_MAP_RUNTIME_ENABLED || import.meta.env.MAP_NAVER_RUNTIME || '').toLowerCase()
+);
+const NAVER_MAP_SCRIPT_ID = 'naver-map-js-sdk';
+const NAVER_MAP_PARAM_CANDIDATES = ['ncpKeyId', 'ncpClientId'];
+
+const cleanStationName = (name = '') => name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
+
+const buildNaverMapsScriptSrc = (clientId, paramName, callbackName) => {
+    const params = new URLSearchParams({ [paramName]: clientId });
+    if (callbackName) params.set('callback', callbackName);
+    return `https://oapi.map.naver.com/openapi/v3/maps.js?${params.toString()}`;
+};
+
+const waitForNaverMaps = (timeoutMs = 7000) => new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const check = () => {
+        if (window.naver?.maps?.Map) {
+            resolve(window.naver.maps);
+            return;
+        }
+
+        if (Date.now() - startedAt > timeoutMs) {
+            reject(new Error('NAVER Maps SDK did not initialize.'));
+            return;
+        }
+
+        window.setTimeout(check, 80);
+    };
+
+    check();
+});
+
+const loadNaverMapsScript = (clientId, paramName) => {
+    if (window.naver?.maps?.Map) return Promise.resolve(window.naver.maps);
+    if (window.__naverMapsLoader) return window.__naverMapsLoader;
+
+    window.__naverMapsLoader = new Promise((resolve, reject) => {
+        const existingScript = document.getElementById(NAVER_MAP_SCRIPT_ID);
+        if (existingScript) {
+            if (window.naver?.maps?.Map) {
+                resolve(window.naver.maps);
+                return;
+            }
+            existingScript.remove();
+        }
+
+        const script = document.createElement('script');
+        let settled = false;
+        const callbackName = `__naverMapsReady_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const fail = (error) => {
+            if (settled) return;
+            settled = true;
+            window.__naverMapsLoader = null;
+            window.removeEventListener('error', handleScriptError, true);
+            delete window[callbackName];
+            script.remove();
+            reject(error);
+        };
+        const succeed = () => {
+            if (settled) return;
+            waitForNaverMaps().then((maps) => {
+                if (settled) return;
+                settled = true;
+                window.removeEventListener('error', handleScriptError, true);
+                delete window[callbackName];
+                resolve(maps);
+            }).catch(fail);
+        };
+        function handleScriptError(event) {
+            const source = `${event.filename || ''} ${event.message || ''}`;
+            if (source.includes('oapi.map.naver.com/openapi/v3/maps.js') || source.includes('capitalize')) {
+                event.preventDefault();
+                fail(new Error('NAVER Maps SDK authentication failed.'));
+            }
+        }
+
+        window.addEventListener('error', handleScriptError, true);
+        window[callbackName] = succeed;
+        script.id = NAVER_MAP_SCRIPT_ID;
+        script.dataset.paramName = paramName;
+        script.src = buildNaverMapsScriptSrc(clientId, paramName, callbackName);
+        script.async = true;
+        script.onload = succeed;
+        script.onerror = () => fail(new Error('Failed to load NAVER Maps SDK.'));
+        document.head.appendChild(script);
+    });
+
+    return window.__naverMapsLoader;
+};
+
+const preflightNaverMapsScriptParam = (clientId, paramName) => new Promise((resolve) => {
+    const requestId = `naver-preflight-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const iframe = document.createElement('iframe');
+    const timer = window.setTimeout(() => finish(false), 8000);
+
+    function finish(ok) {
+        window.clearTimeout(timer);
+        window.removeEventListener('message', handleMessage);
+        iframe.remove();
+        resolve(ok);
+    }
+
+    function handleMessage(event) {
+        if (event.source !== iframe.contentWindow || event.data?.requestId !== requestId) return;
+        finish(event.data.status === 'ready');
+    }
+
+    window.addEventListener('message', handleMessage);
+    iframe.style.display = 'none';
+    iframe.sandbox = 'allow-scripts allow-same-origin';
+    document.body.appendChild(iframe);
+
+    const callbackName = `naverPreflightReady_${requestId.replace(/-/g, '_')}`;
+    const src = buildNaverMapsScriptSrc(clientId, paramName, callbackName);
+    const doc = iframe.contentDocument;
+    doc.open();
+    doc.write(`
+        <!doctype html>
+        <html>
+            <body>
+                <script>
+                    var requestId = ${JSON.stringify(requestId)};
+                    function report(status) {
+                        parent.postMessage({ requestId: requestId, status: status }, '*');
+                    }
+                    window.onerror = function () {
+                        report('failed');
+                        return true;
+                    };
+                    window[${JSON.stringify(callbackName)}] = function () {
+                        var startedAt = Date.now();
+                        function check() {
+                            if (window.naver && window.naver.maps && window.naver.maps.Map) {
+                                report('ready');
+                                return;
+                            }
+                            if (Date.now() - startedAt > 7000) {
+                                report('failed');
+                                return;
+                            }
+                            setTimeout(check, 80);
+                        }
+                        check();
+                    };
+                </script>
+                <script src="${src}" onerror="report('failed')"></script>
+            </body>
+        </html>
+    `);
+    doc.close();
+});
+
+const preflightNaverMapsScript = async (clientId) => {
+    for (const paramName of NAVER_MAP_PARAM_CANDIDATES) {
+        if (await preflightNaverMapsScriptParam(clientId, paramName)) return paramName;
+    }
+    return '';
+};
+
+function getNaverMarkerIcon({ station, style, magnitude, selected, hovered, labelled }) {
+    const size = Math.round((selected ? 30 : hovered ? 25 : 14) + magnitude * (selected ? 18 : 16));
+    const label = labelled || selected || hovered
+        ? `<span class="naver-station-label">${station.name}</span>`
+        : '';
+    const activeClass = selected ? ' is-selected' : hovered ? ' is-hovered' : '';
+    const subtleClass = style.opacity < 0.5 ? ' is-muted' : '';
+
+    return {
+        content: `
+            <div class="naver-station-marker${activeClass}${subtleClass}" style="--marker-color:${style.color};--marker-size:${size}px;">
+                <span class="marker-core"></span>
+                ${label}
+            </div>
+        `,
+        anchor: new window.naver.maps.Point(size / 2, size / 2),
+    };
+}
+
+function NaverMapGate(props) {
+    const [status, setStatus] = useState(NAVER_MAP_CLIENT_ID && NAVER_MAP_RUNTIME_ENABLED ? 'checking' : 'failed');
+    const [paramName, setParamName] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!NAVER_MAP_CLIENT_ID || !NAVER_MAP_RUNTIME_ENABLED) {
+            setStatus('failed');
+            return;
+        }
+
+        setStatus('checking');
+        preflightNaverMapsScript(NAVER_MAP_CLIENT_ID).then((detectedParamName) => {
+            if (cancelled) return;
+            setParamName(detectedParamName);
+            setStatus(detectedParamName ? 'ready' : 'failed');
+        });
+
+        return () => { cancelled = true; };
+    }, []);
+
+    if (status === 'ready') {
+        return (
+            <NaverMapErrorBoundary>
+                <NaverMapLayer {...props} paramName={paramName} />
+            </NaverMapErrorBoundary>
+        );
+    }
+
+    return (
+        <div className="naver-map-layer">
+            <div className="map-loading-panel">
+                <strong>{status === 'checking' ? 'NAVER 지도 연결 확인 중' : 'NAVER 지도 연결 실패'}</strong>
+                <span>{status === 'checking' ? 'API 키와 도메인 설정을 확인하고 있습니다.' : 'Dynamic Map 설정과 localhost 도메인 등록을 확인하세요.'}</span>
+            </div>
+        </div>
+    );
+}
+
+function NaverMapLayer({
+    stations,
+    selectedLine,
+    activeLineStationNames,
+    selectedStation,
+    hoveredStation,
+    setSelectedStation,
+    setHoveredStation,
+    getStationStyle,
+    getStationMagnitude,
+    onClearSelection,
+    paramName,
+}) {
+    const containerRef = useRef(null);
+    const mapRef = useRef(null);
+    const markersRef = useRef(new Map());
+    const [isReady, setIsReady] = useState(false);
+    const [loadError, setLoadError] = useState('');
+    const [hasFitBounds, setHasFitBounds] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (!NAVER_MAP_CLIENT_ID) {
+            setLoadError('NAVER_MAP_KEY_MISSING');
+            return;
+        }
+
+        loadNaverMapsScript(NAVER_MAP_CLIENT_ID, paramName)
+            .then(() => {
+                if (!cancelled) setIsReady(true);
+            })
+            .catch(() => {
+                if (!cancelled) setLoadError('NAVER_MAP_LOAD_FAILED');
+            });
+
+        return () => { cancelled = true; };
+    }, [paramName]);
+
+    useEffect(() => {
+        if (!isReady || !containerRef.current || mapRef.current) return;
+
+        if (!window.naver?.maps) {
+            setLoadError('NAVER_MAP_LOAD_FAILED');
+            setIsReady(false);
+            return;
+        }
+
+        const { naver } = window;
+        mapRef.current = new naver.maps.Map(containerRef.current, {
+            center: new naver.maps.LatLng(37.5665, 126.9780),
+            zoom: 11,
+            minZoom: 8,
+            maxZoom: 17,
+            scaleControl: false,
+            logoControl: true,
+            mapDataControl: false,
+            zoomControl: true,
+            zoomControlOptions: {
+                position: naver.maps.Position.TOP_RIGHT,
+            },
+        });
+
+        naver.maps.Event.addListener(mapRef.current, 'click', onClearSelection);
+    }, [isReady, onClearSelection]);
+
+    useEffect(() => {
+        if (!isReady) return;
+
+        const timer = window.setTimeout(() => {
+            if (!window.naver?.maps || !mapRef.current) {
+                setLoadError('NAVER_MAP_LOAD_FAILED');
+                setIsReady(false);
+            }
+        }, 1200);
+
+        return () => window.clearTimeout(timer);
+    }, [isReady]);
+
+    useEffect(() => {
+        if (!NAVER_MAP_CLIENT_ID || loadError) return;
+
+        const timer = window.setTimeout(() => {
+            if (!window.naver?.maps || (stations.length > 0 && markersRef.current.size === 0)) {
+                setLoadError('NAVER_MAP_LOAD_FAILED');
+                setIsReady(false);
+            }
+        }, 3500);
+
+        return () => window.clearTimeout(timer);
+    }, [loadError, stations.length]);
+
+    useEffect(() => {
+        if (!isReady || !mapRef.current || stations.length === 0 || hasFitBounds) return;
+
+        const { naver } = window;
+        const firstStation = stations[0];
+        const firstPosition = new naver.maps.LatLng(firstStation.y, firstStation.x);
+        const bounds = new naver.maps.LatLngBounds(firstPosition, firstPosition);
+        stations.slice(1).forEach((station) => bounds.extend(new naver.maps.LatLng(station.y, station.x)));
+        mapRef.current.fitBounds(bounds);
+        setHasFitBounds(true);
+    }, [hasFitBounds, isReady, stations]);
+
+    useEffect(() => {
+        if (!isReady || !mapRef.current) return;
+
+        const { naver } = window;
+        const markerMap = markersRef.current;
+        const stationIds = new Set(stations.map((station) => station.id));
+
+        markerMap.forEach((entry, id) => {
+            if (!stationIds.has(id)) {
+                entry.marker.setMap(null);
+                entry.listeners.forEach((listener) => naver.maps.Event.removeListener(listener));
+                markerMap.delete(id);
+            }
+        });
+
+        stations.forEach((station) => {
+            const style = getStationStyle(station);
+            const visible = style.interactive;
+            const selected = selectedStation?.id === station.id;
+            const hovered = hoveredStation?.id === station.id;
+            const magnitude = getStationMagnitude(station);
+            const labelled = selectedLine !== 'All' && visible;
+            const icon = getNaverMarkerIcon({ station, style, magnitude, selected, hovered, labelled });
+
+            let entry = markerMap.get(station.id);
+            if (!entry) {
+                const marker = new naver.maps.Marker({
+                    position: new naver.maps.LatLng(station.y, station.x),
+                    map: visible ? mapRef.current : null,
+                    icon,
+                    clickable: true,
+                    zIndex: selected ? 500 : hovered ? 450 : Math.round(100 + magnitude * 200),
+                });
+
+                marker.__station = station;
+                const listeners = [
+                    naver.maps.Event.addListener(marker, 'click', () => {
+                        setSelectedStation(marker.__station);
+                    }),
+                    naver.maps.Event.addListener(marker, 'mouseover', () => {
+                        setHoveredStation(marker.__station);
+                    }),
+                    naver.maps.Event.addListener(marker, 'mouseout', () => {
+                        setHoveredStation(null);
+                    }),
+                ];
+
+                entry = { marker, listeners };
+                markerMap.set(station.id, entry);
+            }
+
+            entry.marker.__station = station;
+            entry.marker.setPosition(new naver.maps.LatLng(station.y, station.x));
+            entry.marker.setIcon(icon);
+            entry.marker.setMap(visible ? mapRef.current : null);
+            entry.marker.setZIndex(selected ? 500 : hovered ? 450 : Math.round(100 + magnitude * 200));
+        });
+    }, [
+        activeLineStationNames,
+        getStationMagnitude,
+        getStationStyle,
+        hoveredStation,
+        isReady,
+        selectedLine,
+        selectedStation,
+        setHoveredStation,
+        setSelectedStation,
+        stations,
+    ]);
+
+    useEffect(() => {
+        const markerMap = markersRef.current;
+        return () => {
+            const { naver } = window;
+            markerMap.forEach((entry) => {
+                entry.marker.setMap(null);
+                if (naver?.maps) entry.listeners.forEach((listener) => naver.maps.Event.removeListener(listener));
+            });
+            markerMap.clear();
+        };
+    }, []);
+
+    return (
+        <div className="naver-map-layer">
+            <div ref={containerRef} className="naver-map-canvas" />
+            {(!isReady || loadError) && (
+                <div className="map-loading-panel">
+                    <strong>{loadError ? 'NAVER 지도 연결 실패' : 'NAVER 지도 로딩 중'}</strong>
+                    <span>{loadError === 'NAVER_MAP_KEY_MISSING' ? '.env의 MAP_API 값을 확인하세요.' : loadError ? '네이버 콘솔에서 Web 서비스 URL을 포트 없이 http://localhost 로 등록했는지 확인하세요.' : '지도 타일과 역 마커를 준비하고 있습니다.'}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
+class NaverMapErrorBoundary extends Component {
+    constructor(props) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return (
+                <div className="naver-map-layer">
+                    <div className="map-loading-panel">
+                        <strong>NAVER 지도 연결 실패</strong>
+                        <span>Dynamic Map 설정과 localhost 도메인 등록을 확인하세요.</span>
+                    </div>
+                </div>
+            );
+        }
+
+        return this.props.children;
+    }
+}
 
 /**
  * Seoul Subway Population Movement Flow - Professional Analytics
  */
 function App() {
-    const [availableDates, setAvailableDates] = useState([]);
     const [selectedDate, setSelectedDate] = useState('');
     const [currentDay, setCurrentDay] = useState(null);
     const [stations, setStations] = useState([]);
-    const [mapBounds, setMapBounds] = useState({ minX: 0, maxX: 1, minY: 0, maxY: 1 });
     const [globalDailyMaxCongestion, setGlobalDailyMaxCongestion] = useState(1);
     const [globalDailyMaxStay, setGlobalDailyMaxStay] = useState(1);
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 100, h: 100 });
@@ -35,13 +479,16 @@ function App() {
     });
     const [customResults, setCustomResults] = useState([]);
     const [legendHighlight, setLegendHighlight] = useState(null);
+    const [mapSurface, setMapSurface] = useState('diagram');
 
     const lineColors = {
         "1호선": "#0052A4", "2호선": "#00A84D", "3호선": "#EF7C1C",
         "4호선": "#00A4E3", "5호선": "#996CAC", "6호선": "#CD7C2F",
         "7호선": "#747F00", "8호선": "#E6186C", "9호선": "#BDB092"
     };
-
+    const StateColors = {
+        "Crowded": "#ff4d4d", "Moderate": "#b30000", "Normal": "#006400", "Smooth": "#90c000"
+    };
     const SUBWAY_LINES = [
       {
         line: "1호선",
@@ -137,7 +584,7 @@ function App() {
     ];
 
     useEffect(() => {
-        fetch('date_manifest.json').then(res => res.json()).then(dates => { setAvailableDates(dates); if (dates.length > 0) setSelectedDate(dates[0]); });
+        fetch('date_manifest.json').then(res => res.json()).then(dates => { if (dates.length > 0) setSelectedDate(dates[0]); });
     }, []);
 
     useEffect(() => {
@@ -193,7 +640,7 @@ function App() {
         const names = new Set();
         SUBWAY_LINES.forEach(ld => {
             if (ld.line === selectedLine || ld.line.startsWith(selectedLine + '(')) {
-                ld.stations.forEach(s => { names.add(s.name.replace(/\(.*\)/g, '').replace(/역$/, '').trim()); });
+                ld.stations.forEach(s => { names.add(cleanStationName(s.name)); });
             }
         });
         return names;
@@ -203,8 +650,8 @@ function App() {
         if (stations.length === 0 || !projection) return [];
         const paths = [];
         const getCoord = (n) => {
-            const cleanN = n.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
-            const found = stations.find(s => s.name.replace(/\(.*\)/g, '').replace(/역$/, '').trim() === cleanN);
+            const cleanN = cleanStationName(n);
+            const found = stations.find(s => cleanStationName(s.name) === cleanN);
             if (!found) return null;
             const [cx, cy] = projection([found.x, found.y]);
             return { x: cx, y: cy };
@@ -236,16 +683,16 @@ function App() {
     });
     const resetZoom = () => setViewBox({ x: 0, y: 0, w: 100, h: 100 });
 
-    const getStationStyle = (s) => {
-        const sCleanName = s.name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
+    const getStationStyle = useCallback((s) => {
+        const sCleanName = cleanStationName(s.name);
         const isT = selectedLine === 'All' || (activeLineStationNames && activeLineStationNames.has(sCleanName));
         let r = 1.05, c = "#ccff33", cat = ""; 
         if (viewMode === 'congestion') {
             const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
-            if (ratio > 0.7) { c = "#ff4d4d"; cat = "crowded"; }
-            else if (ratio > 0.4) { c = "#b30000"; cat = "moderate"; }
-            else if (ratio > 0.1) { c = "#006400"; cat = "normal"; }
-            else { c = "#ccff33"; cat = "smooth"; }
+            if (ratio > 0.7) { c = StateColors.Crowded; cat = "crowded"; }
+            else if (ratio > 0.4) { c = StateColors.Moderate; cat = "moderate"; }
+            else if (ratio > 0.1) { c = StateColors.Normal; cat = "normal"; }
+            else { c = StateColors.Smooth; cat = "smooth"; }
         } else if (viewMode === 'inflowOutflow') {
             const diff = (s.hourly_inflow?.[currentTime] || 0) - (s.hourly_outflow?.[currentTime] || 0);
             if (diff > 0) { c = "rgba(230, 85, 13, 0.9)"; cat = "inflow"; }
@@ -267,7 +714,22 @@ function App() {
         if (isLegendHighlighted) r *= 1.3;
 
         return { radius: r, color: c, opacity: isT ? 1 : 0.05, interactive: isT, category: cat, isLegendHighlighted };
-    };
+    }, [activeLineStationNames, currentTime, globalDailyMaxCongestion, legendHighlight, selectedLine, viewMode]);
+
+    const getStationMagnitude = useCallback((s) => {
+        if (viewMode === 'congestion') {
+            return Math.min(1, (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion);
+        }
+        if (viewMode === 'inflowOutflow') {
+            const diff = Math.abs((s.hourly_inflow?.[currentTime] || 0) - (s.hourly_outflow?.[currentTime] || 0));
+            return Math.min(1, diff / globalDailyMaxStay);
+        }
+        if (viewMode === 'train') {
+            const satArr = Object.values(s.train_data || {}).map(v => Math.max(v.upper[currentTime], v.lower[currentTime]));
+            return Math.min(1, (satArr.length > 0 ? Math.max(...satArr) : 0) / 180);
+        }
+        return s.station_type === 'Mixed' ? 0.35 : 0.55;
+    }, [currentTime, globalDailyMaxCongestion, globalDailyMaxStay, viewMode]);
 
     const maxCurrentRatio = stations.length > 0 ? Math.max(...stations.map(s => (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion)) : 0;
     let activeHighlightTier = null;
@@ -334,7 +796,7 @@ function App() {
         if (!searchQuery) return;
         const q = searchQuery.replace(/역$/, '').trim();
         const found = stations.find(s => {
-            const cleanS = s.name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
+            const cleanS = cleanStationName(s.name);
             return cleanS === q || s.name.includes(q);
         });
         if (found) { setSelectedStation(found); setSearchQuery(''); } else { alert('검색한 역을 찾을 수 없습니다.'); }
@@ -405,6 +867,10 @@ function App() {
                             <button className={viewMode === 'stationType' ? 'active' : ''} onClick={() => setViewMode('stationType')}>Type</button>
                             <button className={viewMode === 'train' ? 'active' : ''} onClick={() => setViewMode('train')}>Train</button>
                         </div>
+                        <div className="surface-buttons">
+                            <button className={mapSurface === 'naver' ? 'active' : ''} onClick={() => setMapSurface('naver')}>NAVER</button>
+                            <button className={mapSurface === 'diagram' ? 'active' : ''} onClick={() => setMapSurface('diagram')}>Diagram</button>
+                        </div>
                     </div>
                     <div className="line-filter">
                         <div className={`line-chip ${selectedLine === 'All' ? 'active' : ''}`} onClick={() => { setSelectedLine('All'); setSelectedStation(null); }} style={{backgroundColor: selectedLine === 'All' ? '#2c3e50' : '#fff', color: selectedLine === 'All' ? '#fff' : '#7f8c8d'}}>ALL</div>
@@ -414,51 +880,74 @@ function App() {
                         ))}
                     </div>
                     <div className="map-view">
-                        <div className="map-svg-container" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
-                            <div className="zoom-controls" onClick={e => e.stopPropagation()}>
-                                <button onClick={() => handleZoom(0.7)}>+</button><button onClick={() => handleZoom(1.4)}>-</button><button onClick={resetZoom}>⟲</button>
-                            </div>
-                            <svg width="100%" height="100%" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" onClick={() => { setSelectedStation(null); setLegendHighlight(null); }}>
-                                <rect x="-1000" y="-1000" width="2000" height="2000" fill="#e4f1fe" />
-                                {geoPaths}
-                                {subwayPaths.map(p => {
-                                    const isVis = selectedLine === 'All' || p.id === selectedLine || p.id.startsWith(selectedLine + '(');
-                                    return (<g key={p.id} opacity={isVis ? 0.6 : 0.05}>{p.segments.map((s, i) => <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={p.color} strokeWidth={0.45 * zoomScale} />)}</g>);
-                                })}
-                                {stations.map(s => {
-                                    if (s.id === hoveredStation?.id || s.id === selectedStation?.id || !projection) return null;
-                                    const st = getStationStyle(s); const r = st.radius * zoomScale;
-                                    const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
-                                    const isAutoHighlighted = viewMode === 'congestion' && ((activeHighlightTier === 'crowded' && ratio > 0.7) || (activeHighlightTier === 'moderate' && ratio > 0.4 && ratio <= 0.7));
-                                    const shouldShowLabel = (selectedLine !== 'All' && st.interactive) || isAutoHighlighted || st.isLegendHighlighted;
-                                    const [cx, cy] = projection([s.x, s.y]);
-                                    return (
-                                        <g key={s.id} opacity={st.opacity} style={{ pointerEvents: st.interactive ? 'auto' : 'none' }}>
-                                            <circle cx={cx} cy={cy} r={r} fill={st.color} style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredStation(s)} onMouseLeave={() => setHoveredStation(null)} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
-                                            {shouldShowLabel && <text x={cx} y={cy - r - (0.5 * zoomScale)} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>}
-                                        </g>
-                                    );
-                                })}
-                                {(() => {
-                                    const items = [];
-                                    if (selectedStation) items.push({ s: selectedStation, isSelected: true });
-                                    if (hoveredStation && (!selectedStation || hoveredStation.id !== selectedStation.id)) {
-                                        items.push({ s: hoveredStation, isSelected: false });
-                                    }
-                                    return items.map(({ s, isSelected }) => {
-                                        if (!s || !projection) return null; 
-                                        const st = getStationStyle(s);
-                                        const r = (isSelected ? st.radius * 2 : st.radius * 1.5) * zoomScale;
-                                        const [cx, cy] = projection([s.x, s.y]);
-                                        return (
-                                            <g key={isSelected ? 'selected' : 'hovered'} opacity={1} style={{ pointerEvents: 'auto' }}>
-                                                <circle cx={cx} cy={cy} r={r} fill={st.color} stroke="#000" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
-                                                <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
-                                            </g>
-                                        );
-                                    });
-                                })()}
-                            </svg>
+                        <div
+                            className={`map-svg-container ${mapSurface === 'naver' ? 'naver-surface' : 'diagram-surface'}`}
+                            onMouseDown={mapSurface === 'diagram' ? handleMouseDown : undefined}
+                            onMouseMove={mapSurface === 'diagram' ? handleMouseMove : undefined}
+                            onMouseUp={mapSurface === 'diagram' ? handleMouseUp : undefined}
+                            onMouseLeave={mapSurface === 'diagram' ? handleMouseUp : undefined}
+                        >
+                            {mapSurface === 'naver' ? (
+                                <NaverMapGate
+                                    stations={stations}
+                                    selectedLine={selectedLine}
+                                    activeLineStationNames={activeLineStationNames}
+                                    selectedStation={selectedStation}
+                                    hoveredStation={hoveredStation}
+                                    setSelectedStation={setSelectedStation}
+                                    setHoveredStation={setHoveredStation}
+                                    getStationStyle={getStationStyle}
+                                    getStationMagnitude={getStationMagnitude}
+                                    onClearSelection={() => { setSelectedStation(null); setLegendHighlight(null); }}
+                                />
+                            ) : (
+                                <>
+                                    <div className="zoom-controls" onClick={e => e.stopPropagation()}>
+                                        <button onClick={() => handleZoom(0.7)}>+</button><button onClick={() => handleZoom(1.4)}>-</button><button onClick={resetZoom}>⟲</button>
+                                    </div>
+                                    <svg width="100%" height="100%" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" onClick={() => { setSelectedStation(null); setLegendHighlight(null); }}>
+                                        <rect x="-1000" y="-1000" width="2000" height="2000" fill="#e4f1fe" />
+                                        {geoPaths}
+                                        {subwayPaths.map(p => {
+                                            const isVis = selectedLine === 'All' || p.id === selectedLine || p.id.startsWith(selectedLine + '(');
+                                            return (<g key={p.id} opacity={isVis ? 0.6 : 0.05}>{p.segments.map((s, i) => <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={p.color} strokeWidth={0.45 * zoomScale} />)}</g>);
+                                        })}
+                                        {stations.map(s => {
+                                            if (s.id === hoveredStation?.id || s.id === selectedStation?.id || !projection) return null;
+                                            const st = getStationStyle(s); const r = st.radius * zoomScale;
+                                            const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
+                                            const isAutoHighlighted = viewMode === 'congestion' && ((activeHighlightTier === 'crowded' && ratio > 0.7) || (activeHighlightTier === 'moderate' && ratio > 0.4 && ratio <= 0.7));
+                                            const shouldShowLabel = (selectedLine !== 'All' && st.interactive) || isAutoHighlighted || st.isLegendHighlighted;
+                                            const [cx, cy] = projection([s.x, s.y]);
+                                            return (
+                                                <g key={s.id} opacity={st.opacity} style={{ pointerEvents: st.interactive ? 'auto' : 'none' }}>
+                                                    <circle cx={cx} cy={cy} r={r} fill={st.color} style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredStation(s)} onMouseLeave={() => setHoveredStation(null)} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
+                                                    {shouldShowLabel && <text x={cx} y={cy - r - (0.5 * zoomScale)} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>}
+                                                </g>
+                                            );
+                                        })}
+                                        {(() => {
+                                            const items = [];
+                                            if (selectedStation) items.push({ s: selectedStation, isSelected: true });
+                                            if (hoveredStation && (!selectedStation || hoveredStation.id !== selectedStation.id)) {
+                                                items.push({ s: hoveredStation, isSelected: false });
+                                            }
+                                            return items.map(({ s, isSelected }) => {
+                                                if (!s || !projection) return null; 
+                                                const st = getStationStyle(s);
+                                                const r = (isSelected ? st.radius * 2 : st.radius * 1.5) * zoomScale;
+                                                const [cx, cy] = projection([s.x, s.y]);
+                                                return (
+                                                    <g key={isSelected ? 'selected' : 'hovered'} opacity={1} style={{ pointerEvents: 'auto' }}>
+                                                        <circle cx={cx} cy={cy} r={r} fill={st.color} stroke="#000" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
+                                                        <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
+                                                    </g>
+                                                );
+                                            });
+                                        })()}
+                                    </svg>
+                                </>
+                            )}
                             <div className="context-overlay" onClick={e => e.stopPropagation()}>
                                 <div className="weather-info">🗓️ {selectedDate} ({String(currentTime).padStart(2, '0')}:00)</div>
                                 <div className="weather-info"><span className="icon">{currentWeather.condition === 'Rainy' ? '🌧️' : currentWeather.condition === 'Sunny' ? '☀️' : currentWeather.condition === 'Cloudy' ? '☁️' : currentWeather.condition === 'Night' ? '🌙' : '✨'}</span><span>{currentWeather.temp}°C, {currentWeather.condition}</span></div>
@@ -468,16 +957,16 @@ function App() {
                                 {viewMode === 'congestion' ? (
                                     <>
                                         <div className={`legend-item ${legendHighlight === 'crowded' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'crowded' ? null : 'crowded')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'crowded' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#ff4d4d'}}></div><span>Crowded (70%+)</span>
+                                            <div className="color-box" style={{backgroundColor: StateColors.Crowded}}></div><span>Crowded (70%+)</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'moderate' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'moderate' ? null : 'moderate')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'moderate' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#b30000'}}></div><span>Moderate (40~70%)</span>
+                                            <div className="color-box" style={{backgroundColor: StateColors.Moderate}}></div><span>Moderate (40~70%)</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'normal' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'normal' ? null : 'normal')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'normal' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#006400'}}></div><span>Normal (10~40%)</span>
+                                            <div className="color-box" style={{backgroundColor: StateColors.Normal}}></div><span>Normal (10~40%)</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'smooth' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'smooth' ? null : 'smooth')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'smooth' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#ccff33'}}></div><span>Smooth (0~10%)</span>
+                                            <div className="color-box" style={{backgroundColor: StateColors.Smooth}}></div><span>Smooth (0~10%)</span>
                                         </div>
                                     </>
                                 ) : viewMode === 'train' ? (
@@ -537,7 +1026,8 @@ function App() {
                             <div className="dashboard-content">
                                 <div className="station-header"><h3>{selectedStation.name}</h3><span className="type-badge">{selectedStation.station_type}</span></div>
                                 <div className="chart-container">
-                                    <h4>Hourly Congestion (vs Last Week) (Number of getting on - getting off on the subway)</h4>
+                                    <h4>Hourly Congestion (vs Last Week)</h4>
+                                    <h5>(Number of getting on - getting off on the subway)</h5>
                                     <svg viewBox="0 0 350 225" className="chart-svg">
                                         <text x="180" y="215" fontSize="10" fill="#95a5a6" textAnchor="middle">Time (Hour)</text>
                                         <text x="5" y="105" fontSize="10" fill="#95a5a6" textAnchor="middle" transform="rotate(-90 5,105)">Congestion</text>
@@ -565,7 +1055,8 @@ function App() {
                                     </svg>
                                 </div>
                                 <div className="chart-container">
-                                    <h4>Stay Tendency (Number of getting on + getting off on the subway)</h4>
+                                    <h4>Stay Tendency</h4>
+                                    <h5>(Number of getting on + getting off on the subway)</h5>
                                     <svg viewBox="0 0 350 225" className="chart-svg">
                                         <text x="180" y="215" fontSize="10" fill="#95a5a6" textAnchor="middle">Time (Hour)</text>
                                         <text x="10" y="105" fontSize="10" fill="#95a5a6" textAnchor="middle" transform="rotate(-90 10,105)">Flow Balance</text>
