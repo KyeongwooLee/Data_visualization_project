@@ -6,10 +6,47 @@ const NAVER_MAP_CLIENT_ID = (import.meta.env.VITE_NAVER_MAP_KEY || import.meta.e
 const NAVER_MAP_RUNTIME_ENABLED = ['1', 'true', 'yes'].includes(
     String(import.meta.env.VITE_NAVER_MAP_RUNTIME_ENABLED || import.meta.env.MAP_NAVER_RUNTIME || '').toLowerCase()
 );
+const CITY_DATA_API_KEY = (import.meta.env.VITE_CITY_DATA_API_KEY || import.meta.env.CITY_DATA_API_KEY || '').trim();
 const NAVER_MAP_SCRIPT_ID = 'naver-map-js-sdk';
 const NAVER_MAP_PARAM_CANDIDATES = ['ncpKeyId', 'ncpClientId'];
 
 const cleanStationName = (name = '') => name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
+const hours = Array.from({ length: 24 }, (_, hour) => hour);
+const formatNumber = (n) => new Intl.NumberFormat().format(Math.round(Number(n) || 0));
+const hourLabel = (hour) => `${String(hour).padStart(2, '0')}:00`;
+
+const TYPE_LABELS = {
+    Business: 'Morning Inflow',
+    Residential: 'Morning Outflow',
+    Mixed: 'Mixed Flow',
+    'Commercial Night': 'Commercial Night',
+};
+
+const TYPE_COLORS = {
+    Business: '#e67e22',
+    Residential: '#2fbf71',
+    Mixed: '#8d99a6',
+    'Commercial Night': '#d9467c',
+};
+
+const DRY_WEATHER_EVENT = {
+    rainMm: 0,
+    snowCm: 0,
+    newSnowCm: 0,
+    phenomenonCode: '',
+    weatherImpact: 'Dry',
+};
+
+const WEATHER_STYLES = {
+    Dry: { label: 'Dry', icon: 'Clear', color: '#8d99a6' },
+    Rain: { label: 'Rain', icon: 'Rain', color: '#2f80ed' },
+    'Heavy Rain': { label: 'Heavy Rain', icon: 'Heavy Rain', color: '#0f4c81' },
+    Snow: { label: 'Snow', icon: 'Snow', color: '#7fbfff' },
+    'Snow Accumulation': { label: 'Snow Accumulation', icon: 'Snow Build-up', color: '#5a8dee' },
+};
+
+const getStationTypeLabel = (type) => TYPE_LABELS[type] || TYPE_LABELS.Mixed;
+const getWeatherStyle = (event = DRY_WEATHER_EVENT) => WEATHER_STYLES[event.weatherImpact] || WEATHER_STYLES.Dry;
 
 const buildNaverMapsScriptSrc = (clientId, paramName, callbackName) => {
     const params = new URLSearchParams({ [paramName]: clientId });
@@ -165,7 +202,7 @@ const preflightNaverMapsScript = async (clientId) => {
 };
 
 function getNaverMarkerIcon({ station, style, magnitude, selected, hovered, labelled }) {
-    const size = Math.round((selected ? 30 : hovered ? 25 : 14) + magnitude * (selected ? 18 : 16));
+    const size = Math.round((selected ? 24 : hovered ? 20 : 12) + magnitude * (selected ? 12 : 10));
     const label = labelled || selected || hovered
         ? `<span class="naver-station-label">${station.name}</span>`
         : '';
@@ -175,6 +212,8 @@ function getNaverMarkerIcon({ station, style, magnitude, selected, hovered, labe
     return {
         content: `
             <div class="naver-station-marker${activeClass}${subtleClass}" style="--marker-color:${style.color};--marker-size:${size}px;">
+                <span class="marker-glow"></span>
+                <span class="marker-ring"></span>
                 <span class="marker-core"></span>
                 ${label}
             </div>
@@ -216,8 +255,8 @@ function NaverMapGate(props) {
     return (
         <div className="naver-map-layer">
             <div className="map-loading-panel">
-                <strong>{status === 'checking' ? 'NAVER 지도 연결 확인 중' : 'NAVER 지도 연결 실패'}</strong>
-                <span>{status === 'checking' ? 'API 키와 도메인 설정을 확인하고 있습니다.' : 'Dynamic Map 설정과 localhost 도메인 등록을 확인하세요.'}</span>
+                <strong>{status === 'checking' ? 'Checking NAVER Map' : 'NAVER Map unavailable'}</strong>
+                <span>{status === 'checking' ? 'Checking API key and domain settings.' : 'Use Diagram mode when the runtime map is unavailable.'}</span>
             </div>
         </div>
     );
@@ -227,6 +266,7 @@ function NaverMapLayer({
     stations,
     selectedLine,
     activeLineStationNames,
+    routeSegments,
     selectedStation,
     hoveredStation,
     setSelectedStation,
@@ -239,9 +279,11 @@ function NaverMapLayer({
     const containerRef = useRef(null);
     const mapRef = useRef(null);
     const markersRef = useRef(new Map());
+    const routeLinesRef = useRef([]);
     const [isReady, setIsReady] = useState(false);
     const [loadError, setLoadError] = useState('');
     const [hasFitBounds, setHasFitBounds] = useState(false);
+    const [mapZoom, setMapZoom] = useState(11);
 
     useEffect(() => {
         let cancelled = false;
@@ -287,6 +329,9 @@ function NaverMapLayer({
         });
 
         naver.maps.Event.addListener(mapRef.current, 'click', onClearSelection);
+        naver.maps.Event.addListener(mapRef.current, 'zoom_changed', () => {
+            setMapZoom(mapRef.current.getZoom());
+        });
     }, [isReady, onClearSelection]);
 
     useEffect(() => {
@@ -326,6 +371,44 @@ function NaverMapLayer({
         mapRef.current.fitBounds(bounds);
         setHasFitBounds(true);
     }, [hasFitBounds, isReady, stations]);
+
+    useEffect(() => {
+        if (!isReady || !mapRef.current || !window.naver?.maps) return;
+
+        const { naver } = window;
+        routeLinesRef.current.forEach((line) => line.setMap(null));
+        routeLinesRef.current = [];
+
+        (routeSegments || []).forEach((lineInfo) => {
+            const isVisibleLine = selectedLine === 'All' || lineInfo.id === selectedLine || lineInfo.id.startsWith(selectedLine + '(');
+            if (!isVisibleLine) return;
+
+            const selectedOpacity = selectedLine === 'All' ? (mapZoom <= 12 ? 0.26 : 0.12) : 0.78;
+            const selectedWeight = selectedLine === 'All' ? (mapZoom <= 12 ? 3 : 2) : 5;
+
+            lineInfo.segments.forEach((segment) => {
+                const polyline = new naver.maps.Polyline({
+                    map: mapRef.current,
+                    path: [
+                        new naver.maps.LatLng(segment.start.lat, segment.start.lng),
+                        new naver.maps.LatLng(segment.end.lat, segment.end.lng),
+                    ],
+                    strokeColor: lineInfo.color,
+                    strokeOpacity: selectedOpacity,
+                    strokeWeight: selectedWeight,
+                    strokeLineCap: 'round',
+                    strokeLineJoin: 'round',
+                    zIndex: selectedLine === 'All' ? 60 : 120,
+                });
+                routeLinesRef.current.push(polyline);
+            });
+        });
+
+        return () => {
+            routeLinesRef.current.forEach((line) => line.setMap(null));
+            routeLinesRef.current = [];
+        };
+    }, [isReady, mapZoom, routeSegments, selectedLine]);
 
     useEffect(() => {
         if (!isReady || !mapRef.current) return;
@@ -406,6 +489,8 @@ function NaverMapLayer({
                 if (naver?.maps) entry.listeners.forEach((listener) => naver.maps.Event.removeListener(listener));
             });
             markerMap.clear();
+            routeLinesRef.current.forEach((line) => line.setMap(null));
+            routeLinesRef.current = [];
         };
     }, []);
 
@@ -414,8 +499,8 @@ function NaverMapLayer({
             <div ref={containerRef} className="naver-map-canvas" />
             {(!isReady || loadError) && (
                 <div className="map-loading-panel">
-                    <strong>{loadError ? 'NAVER 지도 연결 실패' : 'NAVER 지도 로딩 중'}</strong>
-                    <span>{loadError === 'NAVER_MAP_KEY_MISSING' ? '.env의 MAP_API 값을 확인하세요.' : loadError ? '네이버 콘솔에서 Web 서비스 URL을 포트 없이 http://localhost 로 등록했는지 확인하세요.' : '지도 타일과 역 마커를 준비하고 있습니다.'}</span>
+                    <strong>{loadError ? 'NAVER Map unavailable' : 'Loading NAVER Map'}</strong>
+                    <span>{loadError === 'NAVER_MAP_KEY_MISSING' ? 'Check MAP_API in .env.' : loadError ? 'Use Diagram mode while the map service is unavailable.' : 'Preparing map tiles and station markers.'}</span>
                 </div>
             )}
         </div>
@@ -437,8 +522,8 @@ class NaverMapErrorBoundary extends Component {
             return (
                 <div className="naver-map-layer">
                     <div className="map-loading-panel">
-                        <strong>NAVER 지도 연결 실패</strong>
-                        <span>Dynamic Map 설정과 localhost 도메인 등록을 확인하세요.</span>
+                        <strong>NAVER Map unavailable</strong>
+                        <span>Use Diagram mode while the map service is unavailable.</span>
                     </div>
                 </div>
             );
@@ -446,6 +531,274 @@ class NaverMapErrorBoundary extends Component {
 
         return this.props.children;
     }
+}
+
+function RhythmBand({ values = [], currentTime, weatherEvents = [], onHourChange, compact = false }) {
+    const maxValue = Math.max(...values, 1);
+
+    return (
+        <div className={`rhythm-band ${compact ? 'compact' : ''}`}>
+            <div className="rhythm-track">
+                {hours.map((hour) => {
+                    const value = values[hour] || 0;
+                    const event = weatherEvents[hour] || DRY_WEATHER_EVENT;
+                    const weatherStyle = getWeatherStyle(event);
+                    return (
+                        <button
+                            key={hour}
+                            className={`rhythm-cell ${hour === currentTime ? 'active' : ''} ${event.weatherImpact !== 'Dry' ? 'has-weather' : ''}`}
+                            style={{
+                                '--load': `${Math.max(0.08, value / maxValue)}`,
+                                '--weather-color': weatherStyle.color,
+                            }}
+                            title={`${hourLabel(hour)} ${formatNumber(value)} ${weatherStyle.label}`}
+                            onClick={() => onHourChange?.(hour)}
+                        >
+                            <span />
+                        </button>
+                    );
+                })}
+            </div>
+            {!compact && (
+                <div className="rhythm-hours">
+                    {[0, 6, 12, 18, 23].map((hour) => <span key={hour}>{hourLabel(hour)}</span>)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function FlowBalanceBars({ station, currentTime, onHourChange }) {
+    const inflow = station?.hourly_inflow || [];
+    const outflow = station?.hourly_outflow || [];
+    const maxValue = Math.max(...hours.map((hour) => Math.max(inflow[hour] || 0, outflow[hour] || 0)), 1);
+
+    return (
+        <div className="flow-balance">
+            {hours.map((hour) => (
+                <button
+                    key={hour}
+                    className={`flow-row ${hour === currentTime ? 'active' : ''}`}
+                    onClick={() => onHourChange(hour)}
+                    title={`${hourLabel(hour)} Inflow ${formatNumber(inflow[hour])}, Outflow ${formatNumber(outflow[hour])}`}
+                >
+                    <span className="flow-hour">{String(hour).padStart(2, '0')}</span>
+                    <span className="flow-side out">
+                        <i style={{ width: `${((outflow[hour] || 0) / maxValue) * 100}%` }} />
+                    </span>
+                    <span className="flow-axis" />
+                    <span className="flow-side in">
+                        <i style={{ width: `${((inflow[hour] || 0) / maxValue) * 100}%` }} />
+                    </span>
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function WeatherImpactTimeline({ events = [], values = [], currentTime, onHourChange }) {
+    const maxValue = Math.max(...values, 1);
+
+    return (
+        <div className="weather-impact-timeline">
+            {hours.map((hour) => {
+                const event = events[hour] || DRY_WEATHER_EVENT;
+                const style = getWeatherStyle(event);
+                const load = values[hour] || 0;
+                return (
+                    <button
+                        key={hour}
+                        className={`weather-tick ${hour === currentTime ? 'active' : ''} ${event.weatherImpact !== 'Dry' ? 'event' : ''}`}
+                        style={{
+                            '--weather-color': style.color,
+                            '--load-height': `${Math.max(8, (load / maxValue) * 72)}%`,
+                        }}
+                        title={`${hourLabel(hour)} ${style.label}, load ${formatNumber(load)}`}
+                        onClick={() => onHourChange(hour, event)}
+                    >
+                        <span className="weather-texture" />
+                        <span className="weather-load" />
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function SimilarStationOrbit({ station, onCompare }) {
+    const similar = (station?.similar_stations || []).slice(0, 8);
+    const maxScore = Math.max(...similar.map((item) => item.score || 0), 1);
+
+    return (
+        <div className="similar-orbit">
+            <div className="orbit-center">
+                <strong>{station?.name}</strong>
+                <span>{getStationTypeLabel(station?.station_type)}</span>
+            </div>
+            {similar.map((item, index) => {
+                const angle = (-90 + (360 / Math.max(similar.length, 1)) * index) * (Math.PI / 180);
+                const normalized = (item.score || 0) / maxScore;
+                const radius = 118 - normalized * 28;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                return (
+                    <button
+                        key={`${item.name}-${index}`}
+                        className="orbit-node"
+                        style={{
+                            transform: `translate(${x}px, ${y}px)`,
+                            '--score': `${normalized}`,
+                        }}
+                        onClick={() => onCompare(item.name)}
+                        title={`${item.name} similarity ${item.score}%`}
+                    >
+                        <strong>{item.name}</strong>
+                        <span>{item.score}%</span>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function OverviewPanel({ overview, currentTime, weatherEvents, onHourChange }) {
+    if (!overview) {
+        return <div className="empty-selection"><p>Loading overview</p></div>;
+    }
+
+    return (
+        <div className="dashboard-content overview-panel">
+            <div className="overview-header">
+                <span>Today Overview</span>
+                <strong>{overview.date}</strong>
+            </div>
+            <div className="overview-metrics">
+                <div>
+                    <span>Day Type</span>
+                    <strong>{overview.dayType}</strong>
+                </div>
+                <div>
+                    <span>Peak Hour</span>
+                    <strong>{hourLabel(overview.peakHour)}</strong>
+                </div>
+            </div>
+            <section className="overview-section">
+                <h4>24h Network Rhythm</h4>
+                <RhythmBand values={overview.hourlyNetworkLoad} currentTime={currentTime} weatherEvents={weatherEvents} onHourChange={onHourChange} />
+            </section>
+            <section className="overview-section">
+                <h4>Top 5 Busiest Stations</h4>
+                <div className="top-stations">
+                    {overview.topStations.map((station) => (
+                        <div key={station.name} className="top-station-row">
+                            <span>{station.name}</span>
+                            <strong>{formatNumber(station.value)}</strong>
+                        </div>
+                    ))}
+                </div>
+            </section>
+            <section className="overview-section compact-summary">
+                <div>
+                    <span>Rain/Snow Summary</span>
+                    <strong>{overview.weatherSummary}</strong>
+                </div>
+                <div>
+                    <span>Quieter Hours</span>
+                    <strong>{overview.quietHours.map(hourLabel).join(' / ')}</strong>
+                </div>
+            </section>
+        </div>
+    );
+}
+
+function LiveNowCard({ station, areaMap, status, data }) {
+    const areaLabel = areaMap?.label || areaMap?.area || '';
+    const unavailableCopy = {
+        unmapped: 'No Seoul live area mapping for this station.',
+        'missing-key': 'CITY_DATA_API_KEY is not configured.',
+        unavailable: 'The live city feed could not be reached.',
+    };
+
+    return (
+        <div className={`live-card ${status === 'ready' ? 'ready' : ''}`}>
+            <div className="live-card-title">
+                <span>Live Now</span>
+                <strong>{areaLabel || cleanStationName(station?.name)}</strong>
+            </div>
+            {status === 'loading' ? (
+                <p>Loading live context...</p>
+            ) : status !== 'ready' ? (
+                <p><strong>Live data unavailable</strong><br />{unavailableCopy[status] || unavailableCopy.unavailable}</p>
+            ) : (
+                <div className="live-grid">
+                    <div><span>Area Congestion</span><strong>{data.congestion || 'Unknown'}</strong></div>
+                    <div><span>Live Population</span><strong>{data.population || 'Unknown'}</strong></div>
+                    <div><span>Subway Status</span><strong>{data.subway || 'No report'}</strong></div>
+                    <div><span>Weather</span><strong>{data.weather || 'No report'}</strong></div>
+                    <div className="live-wide"><span>Message</span><strong>{data.message || 'No message'}</strong></div>
+                    <div className="live-wide"><span>Event</span><strong>{data.event || 'No event reported'}</strong></div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ComparePanel({ station, compareStation, compareName, onCompareChange }) {
+    const similar = station?.similar_stations || [];
+    const stationPeak = station?.hourly_congestion?.indexOf(Math.max(...(station?.hourly_congestion || [0]))) ?? 0;
+    const comparePeak = compareStation?.hourly_congestion?.indexOf(Math.max(...(compareStation?.hourly_congestion || [0]))) ?? 0;
+
+    return (
+        <div className="compare-panel">
+            <div className="compare-heading">
+                <h4>Compare Mode</h4>
+                <select value={compareName} onChange={(event) => onCompareChange(event.target.value)}>
+                    <option value="">Choose similar station</option>
+                    {similar.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+                </select>
+            </div>
+            {compareStation ? (
+                <div className="compare-grid">
+                    {[station, compareStation].map((item) => {
+                        const total = (item.hourly_congestion || []).reduce((sum, value) => sum + value, 0);
+                        const peak = item.id === station.id ? stationPeak : comparePeak;
+                        return (
+                            <div key={item.id} className="compare-card">
+                                <strong>{item.name}</strong>
+                                <span>{getStationTypeLabel(item.station_type)}</span>
+                                <div className="compare-stat"><em>Daily Load</em><b>{formatNumber(total)}</b></div>
+                                <div className="compare-stat"><em>Peak</em><b>{hourLabel(peak)}</b></div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <p className="compare-empty">Pick one orbit station to compare historical patterns side by side.</p>
+            )}
+        </div>
+    );
+}
+
+function normalizeLiveCityData(payload) {
+    const data = payload?.CITYDATA || payload?.citydata || payload;
+    const first = (value) => Array.isArray(value) ? value[0] : value;
+    const asList = (value) => Array.isArray(value) ? value : value ? [value] : [];
+    const population = first(data?.LIVE_PPLTN_STTS) || {};
+    const subPopulation = first(data?.LIVE_SUB_PPLTN) || {};
+    const subway = first(data?.SUB_STTS) || {};
+    const weather = first(data?.WEATHER_STTS) || {};
+    const events = asList(data?.EVENT_STTS);
+    const minPop = population.AREA_PPLTN_MIN || population.AREA_PPLTN_MIN || subPopulation.SUB_PPLTN_MIN;
+    const maxPop = population.AREA_PPLTN_MAX || population.AREA_PPLTN_MAX || subPopulation.SUB_PPLTN_MAX;
+
+    return {
+        congestion: population.AREA_CONGEST_LVL || population.AREA_CONGEST || '',
+        message: population.AREA_CONGEST_MSG || population.AREA_PPLTN_MSG || '',
+        population: minPop && maxPop ? `${formatNumber(minPop)}-${formatNumber(maxPop)}` : '',
+        subway: subway.SUB_STTS || subway.SUB_MSG || subPopulation.SUB_PPLTN || subPopulation.SUB_CONGEST_LVL || '',
+        weather: weather.WEATHER_STTS || weather.TEMP ? `${weather.WEATHER_STTS || 'Weather'} ${weather.TEMP ? `${weather.TEMP}C` : ''}`.trim() : '',
+        event: events.length > 0 ? (events[0].EVENT_NM || events[0].EVENT_NAME || 'Event reported') : 'No event reported',
+    };
 }
 
 /**
@@ -480,6 +833,15 @@ function App() {
     const [customResults, setCustomResults] = useState([]);
     const [legendHighlight, setLegendHighlight] = useState(null);
     const [mapSurface, setMapSurface] = useState('diagram');
+    const [stationProfiles, setStationProfiles] = useState({});
+    const [stationProfilesByCleanName, setStationProfilesByCleanName] = useState({});
+    const [weatherEvents, setWeatherEvents] = useState({});
+    const [cityDataAreaMap, setCityDataAreaMap] = useState({});
+    const [liveStatus, setLiveStatus] = useState('unmapped');
+    const [liveCityData, setLiveCityData] = useState(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [compareStationName, setCompareStationName] = useState('');
+    const [weatherFocusHour, setWeatherFocusHour] = useState(null);
 
     const lineColors = {
         "1호선": "#0052A4", "2호선": "#00A84D", "3호선": "#EF7C1C",
@@ -487,7 +849,7 @@ function App() {
         "7호선": "#747F00", "8호선": "#E6186C", "9호선": "#BDB092"
     };
     const StateColors = {
-        "Crowded": "#ff4d4d", "Moderate": "#b30000", "Normal": "#006400", "Smooth": "#90c000"
+        "Crowded": "#f04438", "Moderate": "#f79009", "Normal": "#16a34a", "Smooth": "#6b7280"
     };
     const SUBWAY_LINES = [
       {
@@ -584,7 +946,9 @@ function App() {
     ];
 
     useEffect(() => {
-        fetch('date_manifest.json').then(res => res.json()).then(dates => { if (dates.length > 0) setSelectedDate(dates[0]); });
+        fetch('date_manifest.json').then(res => res.json()).then(dates => {
+            if (dates.length > 0) setSelectedDate(dates.includes('2024-06-03') ? '2024-06-03' : dates[dates.length - 1]);
+        });
     }, []);
 
     useEffect(() => {
@@ -592,10 +956,44 @@ function App() {
     }, []);
 
     useEffect(() => {
+        let cancelled = false;
+
+        Promise.all([
+            fetch('station_profiles.json').then(res => res.ok ? res.json() : { stations: {}, byCleanName: {} }).catch(() => ({ stations: {}, byCleanName: {} })),
+            fetch('weather_events.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+            fetch('citydata_area_map.json').then(res => res.ok ? res.json() : {}).catch(() => ({})),
+        ]).then(([profiles, events, areaMap]) => {
+            if (cancelled) return;
+            setStationProfiles(profiles.stations || {});
+            setStationProfilesByCleanName(profiles.byCleanName || {});
+            setWeatherEvents(events || {});
+            setCityDataAreaMap(areaMap || {});
+        });
+
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
         if (!selectedDate) return;
+        const enrichStation = (station) => {
+            const profile = stationProfiles[station.name] || stationProfilesByCleanName[cleanStationName(station.name)];
+            if (!profile) return { ...station, station_type_label: getStationTypeLabel(station.station_type) };
+            return {
+                ...station,
+                station_type: profile.stationType || station.station_type,
+                station_type_label: profile.typeLabel || getStationTypeLabel(profile.stationType || station.station_type),
+                station_profile: profile,
+            };
+        };
+
         fetch(`daily_data/${selectedDate}.json`).then(res => res.json()).then(dayData => {
-            setCurrentDay(dayData);
-            const ds = dayData.stations || [];
+            const hourlyWeatherEvents = weatherEvents[selectedDate] || Array.from({ length: 24 }, () => DRY_WEATHER_EVENT);
+            const enrichedDayData = {
+                ...dayData,
+                hourly_weather_events: hourlyWeatherEvents,
+            };
+            setCurrentDay(enrichedDayData);
+            const ds = (dayData.stations || []).map(enrichStation);
             setStations(ds);
             let dMaxC = 0, dMaxS = 0;
             ds.forEach(s => {
@@ -610,9 +1008,12 @@ function App() {
         });
         const d = new Date(selectedDate); d.setDate(d.getDate() - 7);
         fetch(`daily_data/${d.toISOString().split('T')[0]}.json`).then(res => res.json()).then(prevData => {
-            if (selectedStation) setLastWeekStation(prevData.stations.find(s => s.name === selectedStation.name) || null);
+            if (selectedStation) {
+                const match = prevData.stations.find(s => s.name === selectedStation.name);
+                setLastWeekStation(match ? enrichStation(match) : null);
+            }
         }).catch(() => setLastWeekStation(null));
-    }, [selectedDate, selectedStation?.name]);
+    }, [selectedDate, selectedStation?.name, stationProfiles, stationProfilesByCleanName, weatherEvents]);
 
     const projection = useMemo(() => {
         if (stations.length === 0) return null;
@@ -631,7 +1032,7 @@ function App() {
     const geoPaths = useMemo(() => {
         if (!geoJson || !geoPathGenerator) return null;
         return geoJson.features.map((feature, idx) => {
-            return <path key={`geo-${idx}`} d={geoPathGenerator(feature)} fill="#f9fbfc" stroke="#c0c9d1" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />;
+            return <path key={`geo-${idx}`} d={geoPathGenerator(feature)} fill="#13212b" stroke="#2b4354" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />;
         });
     }, [geoJson, geoPathGenerator]);
 
@@ -667,6 +1068,24 @@ function App() {
         return paths;
     }, [stations, projection]);
 
+    const subwayGeoSegments = useMemo(() => {
+        if (stations.length === 0) return [];
+        const stationLookup = new Map(stations.map((station) => [cleanStationName(station.name), station]));
+        return SUBWAY_LINES.map((lineInfo) => {
+            const segments = [];
+            for (let i = 0; i < lineInfo.stations.length - 1; i += 1) {
+                const startStation = stationLookup.get(cleanStationName(lineInfo.stations[i].name));
+                const endStation = stationLookup.get(cleanStationName(lineInfo.stations[i + 1].name));
+                if (!startStation || !endStation) continue;
+                segments.push({
+                    start: { lat: startStation.y, lng: startStation.x },
+                    end: { lat: endStation.y, lng: endStation.x },
+                });
+            }
+            return { id: lineInfo.line, color: lineInfo.color, segments };
+        }).filter((lineInfo) => lineInfo.segments.length > 0);
+    }, [SUBWAY_LINES, stations]);
+
     const handleMouseDown = (e) => { isDragging.current = true; lastMousePos.current = { x: e.clientX, y: e.clientY }; };
     const handleMouseMove = (e) => {
         if (!isDragging.current) return;
@@ -682,6 +1101,31 @@ function App() {
         return { x: p.x + (p.w - nW) / 2, y: p.y + (p.h - nW * (p.h/p.w)) / 2, w: nW, h: nH };
     });
     const resetZoom = () => setViewBox({ x: 0, y: 0, w: 100, h: 100 });
+
+    const formatNum = formatNumber;
+    const dayInfo = currentDay || { hourly_weather: new Array(24).fill({temp:0, condition:'Clear'}), hourly_weather_events: Array.from({ length: 24 }, () => DRY_WEATHER_EVENT) };
+    const hourlyWeatherEvents = dayInfo.hourly_weather_events || weatherEvents[selectedDate] || Array.from({ length: 24 }, () => DRY_WEATHER_EVENT);
+    const currentWeather = dayInfo.hourly_weather?.[currentTime] || {temp: 0, condition: 'Clear'};
+    const currentWeatherEvent = hourlyWeatherEvents[currentTime] || DRY_WEATHER_EVENT;
+    const currentWeatherStyle = getWeatherStyle(currentWeatherEvent);
+    const selectedAreaMap = selectedStation
+        ? cityDataAreaMap[selectedStation.name] || cityDataAreaMap[cleanStationName(selectedStation.name)]
+        : null;
+
+    const weatherImpactStationIds = useMemo(() => {
+        const focusedHour = weatherFocusHour ?? currentTime;
+        const event = hourlyWeatherEvents[focusedHour] || DRY_WEATHER_EVENT;
+        if (event.weatherImpact === 'Dry') return new Set();
+
+        const scored = stations.map((station) => {
+            const current = station.hourly_congestion?.[focusedHour] || 0;
+            const prev = station.hourly_congestion?.[Math.max(0, focusedHour - 1)] || current;
+            const next = station.hourly_congestion?.[Math.min(23, focusedHour + 1)] || current;
+            return { id: station.id, delta: Math.abs(current - ((prev + next) / 2)) };
+        });
+
+        return new Set(scored.sort((a, b) => b.delta - a.delta).slice(0, 8).map((item) => item.id));
+    }, [currentTime, hourlyWeatherEvents, stations, weatherFocusHour]);
 
     const getStationStyle = useCallback((s) => {
         const sCleanName = cleanStationName(s.name);
@@ -705,16 +1149,22 @@ function App() {
             else if (sat > 50) { c = "#e67e22"; cat = "normal"; }
             else { c = "#ccff33"; cat = "smooth"; }
         } else { 
-            if (s.station_type === 'Business') { c = "#e67e22"; cat = "business"; }
-            else if (s.station_type === 'Residential') { c = "#2ecc71"; cat = "residential"; }
-            else { c = "#95a5a6"; cat = "mixed"; }
+            if (s.station_type === 'Business') { c = TYPE_COLORS.Business; cat = "business"; }
+            else if (s.station_type === 'Residential') { c = TYPE_COLORS.Residential; cat = "residential"; }
+            else if (s.station_type === 'Commercial Night') { c = TYPE_COLORS['Commercial Night']; cat = "commercial-night"; }
+            else { c = TYPE_COLORS.Mixed; cat = "mixed"; }
         }
 
         const isLegendHighlighted = legendHighlight === cat;
         if (isLegendHighlighted) r *= 1.3;
+        if (weatherImpactStationIds.has(s.id)) {
+            r *= 1.35;
+            if (viewMode === 'congestion') c = currentWeatherStyle.color;
+            cat = cat || 'weather-impact';
+        }
 
         return { radius: r, color: c, opacity: isT ? 1 : 0.05, interactive: isT, category: cat, isLegendHighlighted };
-    }, [activeLineStationNames, currentTime, globalDailyMaxCongestion, legendHighlight, selectedLine, viewMode]);
+    }, [activeLineStationNames, currentTime, currentWeatherStyle.color, globalDailyMaxCongestion, legendHighlight, selectedLine, viewMode, weatherImpactStationIds]);
 
     const getStationMagnitude = useCallback((s) => {
         if (viewMode === 'congestion') {
@@ -728,6 +1178,7 @@ function App() {
             const satArr = Object.values(s.train_data || {}).map(v => Math.max(v.upper[currentTime], v.lower[currentTime]));
             return Math.min(1, (satArr.length > 0 ? Math.max(...satArr) : 0) / 180);
         }
+        if (s.station_type === 'Commercial Night') return 0.62;
         return s.station_type === 'Mixed' ? 0.35 : 0.55;
     }, [currentTime, globalDailyMaxCongestion, globalDailyMaxStay, viewMode]);
 
@@ -737,9 +1188,105 @@ function App() {
         if (maxCurrentRatio > 0.7) activeHighlightTier = 'crowded'; else if (maxCurrentRatio > 0.4) activeHighlightTier = 'moderate';
     }
 
-    const formatNum = (n) => new Intl.NumberFormat().format(Math.round(n));
-    const dayInfo = currentDay || { hourly_weather: new Array(24).fill({temp:0, condition:'Clear'}) };
-    const currentWeather = dayInfo.hourly_weather[currentTime] || {temp: 0, condition: 'Clear'};
+    useEffect(() => {
+        if (!isPlaying) return undefined;
+        const timer = window.setInterval(() => {
+            setCurrentTime((prev) => (prev >= 23 ? 0 : prev + 1));
+        }, 850);
+        return () => window.clearInterval(timer);
+    }, [isPlaying]);
+
+    useEffect(() => {
+        setCompareStationName('');
+    }, [selectedStation?.id]);
+
+    useEffect(() => {
+        if (!selectedStation) {
+            setLiveStatus('unmapped');
+            setLiveCityData(null);
+            return undefined;
+        }
+
+        const areaMap = cityDataAreaMap[selectedStation.name] || cityDataAreaMap[cleanStationName(selectedStation.name)];
+        if (!areaMap) {
+            setLiveStatus('unmapped');
+            setLiveCityData(null);
+            return undefined;
+        }
+
+        if (!CITY_DATA_API_KEY) {
+            setLiveStatus('missing-key');
+            setLiveCityData(null);
+            return undefined;
+        }
+
+        const controller = new AbortController();
+        setLiveStatus('loading');
+        setLiveCityData(null);
+
+        const url = `http://openapi.seoul.go.kr:8088/${CITY_DATA_API_KEY}/json/citydata/1/5/${encodeURIComponent(areaMap.area)}`;
+        fetch(url, { signal: controller.signal })
+            .then((res) => {
+                if (!res.ok) throw new Error('CITY_DATA_FETCH_FAILED');
+                return res.json();
+            })
+            .then((payload) => {
+                setLiveCityData(normalizeLiveCityData(payload));
+                setLiveStatus('ready');
+            })
+            .catch((error) => {
+                if (error.name === 'AbortError') return;
+                setLiveStatus('unavailable');
+                setLiveCityData(null);
+            });
+
+        return () => controller.abort();
+    }, [cityDataAreaMap, selectedStation]);
+
+    const overview = useMemo(() => {
+        if (stations.length === 0 || !selectedDate) return null;
+        const hourlyNetworkLoad = hours.map((hour) => stations.reduce((sum, station) => sum + (station.hourly_congestion?.[hour] || 0), 0));
+        const peakHour = hourlyNetworkLoad.indexOf(Math.max(...hourlyNetworkLoad));
+        const topStations = stations
+            .map((station) => ({
+                name: station.name,
+                value: (station.hourly_congestion || []).reduce((sum, value) => sum + value, 0),
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5);
+        const quietHours = hourlyNetworkLoad
+            .map((value, hour) => ({ hour, value }))
+            .filter(({ hour }) => hour >= 10 && hour <= 22)
+            .sort((a, b) => a.value - b.value)
+            .slice(0, 3)
+            .map(({ hour }) => hour);
+        const day = new Date(`${selectedDate}T00:00:00`).getDay();
+        const weatherCounts = hourlyWeatherEvents.reduce((counts, event) => {
+            counts[event.weatherImpact] = (counts[event.weatherImpact] || 0) + 1;
+            return counts;
+        }, {});
+        const rainHours = (weatherCounts.Rain || 0) + (weatherCounts['Heavy Rain'] || 0);
+        const snowHours = (weatherCounts.Snow || 0) + (weatherCounts['Snow Accumulation'] || 0);
+        const weatherSummary = rainHours || snowHours
+            ? `${rainHours} rain h / ${snowHours} snow h`
+            : 'Dry all day';
+
+        return {
+            date: selectedDate,
+            dayType: day === 0 || day === 6 ? 'Weekend' : 'Weekday',
+            peakHour,
+            topStations,
+            quietHours,
+            weatherSummary,
+            hourlyNetworkLoad,
+        };
+    }, [hourlyWeatherEvents, selectedDate, stations]);
+
+    const compareStation = useMemo(() => {
+        if (!compareStationName) return null;
+        const target = cleanStationName(compareStationName);
+        return stations.find((station) => station.name === compareStationName || cleanStationName(station.name) === target) || null;
+    }, [compareStationName, stations]);
 
     // Custom filtering logic moved after dayInfo definition
     useEffect(() => {
@@ -799,16 +1346,16 @@ function App() {
             const cleanS = cleanStationName(s.name);
             return cleanS === q || s.name.includes(q);
         });
-        if (found) { setSelectedStation(found); setSearchQuery(''); } else { alert('검색한 역을 찾을 수 없습니다.'); }
+        if (found) { setSelectedStation(found); setSearchQuery(''); } else { alert('Station not found.'); }
     };
 
     return (
         <div className="app-container">
             <header className="header-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
-                <div className="logo-title" style={{ flex: '1' }}><h1>Seoul Subway Population Movement Flow</h1></div>
+                <div className="logo-title" style={{ flex: '1' }}><h1>Seoul Subway Rhythm Atlas</h1></div>
                 <div className="search-wrapper" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', zIndex: 100 }}>
                     <div className="search-container" style={{ display: 'flex', alignItems: 'center', background: '#fff', padding: '6px 15px', borderRadius: '20px', border: '2px solid #000', gap: '10px' }}>
-                        <input type="text" placeholder="역 이름 검색 (예: 강남)" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeSearch()} style={{ background: 'transparent', border: 'none', color: '#000', outline: 'none', width: '200px', fontSize: '14px' }} />
+                        <input type="text" placeholder="Search station, e.g. Gangnam" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && executeSearch()} style={{ background: 'transparent', border: 'none', color: '#000', outline: 'none', width: '200px', fontSize: '14px' }} />
                         <span style={{ cursor: 'pointer', color: '#000' }} onClick={executeSearch}>🔍</span>
                         <div style={{ width: '1px', height: '20px', background: '#ddd' }}></div>
                         <button className={`custom-toggle-btn ${isCustomOpen ? 'active' : ''}`} onClick={() => setIsCustomOpen(!isCustomOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', color: isCustomOpen ? '#007aff' : '#666' }}>Custom</button>
@@ -862,10 +1409,10 @@ function App() {
                     <div className="control-panel">
                         <div className="input-group"><label>Analysis Date</label><input type="date" value={selectedDate} min="2023-01-01" max="2024-12-31" onChange={e => setSelectedDate(e.target.value)} /></div>
                         <div className="mode-buttons">
-                            <button className={viewMode === 'congestion' ? 'active' : ''} onClick={() => setViewMode('congestion')}>Congestion</button>
-                            <button className={viewMode === 'inflowOutflow' ? 'active' : ''} onClick={() => setViewMode('inflowOutflow')}>Flow</button>
-                            <button className={viewMode === 'stationType' ? 'active' : ''} onClick={() => setViewMode('stationType')}>Type</button>
-                            <button className={viewMode === 'train' ? 'active' : ''} onClick={() => setViewMode('train')}>Train</button>
+                            <button className={viewMode === 'congestion' ? 'active' : ''} onClick={() => setViewMode('congestion')}>Station Load</button>
+                            <button className={viewMode === 'inflowOutflow' ? 'active' : ''} onClick={() => setViewMode('inflowOutflow')}>Flow Direction</button>
+                            <button className={viewMode === 'stationType' ? 'active' : ''} onClick={() => setViewMode('stationType')}>Station Pattern</button>
+                            <button className={viewMode === 'train' ? 'active' : ''} onClick={() => setViewMode('train')}>Train Saturation</button>
                         </div>
                         <div className="surface-buttons">
                             <button className={mapSurface === 'naver' ? 'active' : ''} onClick={() => setMapSurface('naver')}>NAVER</button>
@@ -889,10 +1436,11 @@ function App() {
                         >
                             {mapSurface === 'naver' ? (
                                 <NaverMapGate
-                                    stations={stations}
-                                    selectedLine={selectedLine}
-                                    activeLineStationNames={activeLineStationNames}
-                                    selectedStation={selectedStation}
+                                     stations={stations}
+                                     selectedLine={selectedLine}
+                                     activeLineStationNames={activeLineStationNames}
+                                     routeSegments={subwayGeoSegments}
+                                     selectedStation={selectedStation}
                                     hoveredStation={hoveredStation}
                                     setSelectedStation={setSelectedStation}
                                     setHoveredStation={setHoveredStation}
@@ -906,7 +1454,7 @@ function App() {
                                         <button onClick={() => handleZoom(0.7)}>+</button><button onClick={() => handleZoom(1.4)}>-</button><button onClick={resetZoom}>⟲</button>
                                     </div>
                                     <svg width="100%" height="100%" viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`} preserveAspectRatio="xMidYMid meet" onClick={() => { setSelectedStation(null); setLegendHighlight(null); }}>
-                                        <rect x="-1000" y="-1000" width="2000" height="2000" fill="#e4f1fe" />
+                                        <rect x="-1000" y="-1000" width="2000" height="2000" fill="#0d1720" />
                                         {geoPaths}
                                         {subwayPaths.map(p => {
                                             const isVis = selectedLine === 'All' || p.id === selectedLine || p.id.startsWith(selectedLine + '(');
@@ -918,13 +1466,15 @@ function App() {
                                             const ratio = (s.hourly_congestion?.[currentTime] || 0) / globalDailyMaxCongestion;
                                             const isAutoHighlighted = viewMode === 'congestion' && ((activeHighlightTier === 'crowded' && ratio > 0.7) || (activeHighlightTier === 'moderate' && ratio > 0.4 && ratio <= 0.7));
                                             const shouldShowLabel = (selectedLine !== 'All' && st.interactive) || isAutoHighlighted || st.isLegendHighlighted;
-                                            const [cx, cy] = projection([s.x, s.y]);
-                                            return (
-                                                <g key={s.id} opacity={st.opacity} style={{ pointerEvents: st.interactive ? 'auto' : 'none' }}>
-                                                    <circle cx={cx} cy={cy} r={r} fill={st.color} style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredStation(s)} onMouseLeave={() => setHoveredStation(null)} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
-                                                    {shouldShowLabel && <text x={cx} y={cy - r - (0.5 * zoomScale)} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>}
-                                                </g>
-                                            );
+                                             const [cx, cy] = projection([s.x, s.y]);
+                                             return (
+                                                 <g key={s.id} className="diagram-station-node" opacity={st.opacity} style={{ pointerEvents: st.interactive ? 'auto' : 'none', '--node-color': st.color }}>
+                                                     <circle className="diagram-station-glow" cx={cx} cy={cy} r={r * 2.6} fill={st.color} />
+                                                     <circle className="diagram-station-ring" cx={cx} cy={cy} r={r * 1.35} fill="none" stroke={st.color} strokeWidth={0.18 * zoomScale} />
+                                                     <circle className="diagram-station-dot" cx={cx} cy={cy} r={Math.max(0.45 * zoomScale, r * 0.72)} fill={st.color} style={{ cursor: 'pointer' }} onMouseEnter={() => setHoveredStation(s)} onMouseLeave={() => setHoveredStation(null)} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
+                                                     {shouldShowLabel && <text x={cx} y={cy - r - (0.5 * zoomScale)} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>}
+                                                 </g>
+                                             );
                                         })}
                                         {(() => {
                                             const items = [];
@@ -935,25 +1485,40 @@ function App() {
                                             return items.map(({ s, isSelected }) => {
                                                 if (!s || !projection) return null; 
                                                 const st = getStationStyle(s);
-                                                const r = (isSelected ? st.radius * 2 : st.radius * 1.5) * zoomScale;
-                                                const [cx, cy] = projection([s.x, s.y]);
-                                                return (
-                                                    <g key={isSelected ? 'selected' : 'hovered'} opacity={1} style={{ pointerEvents: 'auto' }}>
-                                                        <circle cx={cx} cy={cy} r={r} fill={st.color} stroke="#000" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
-                                                        <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
-                                                    </g>
-                                                );
+                                                 const r = (isSelected ? st.radius * 2 : st.radius * 1.5) * zoomScale;
+                                                 const [cx, cy] = projection([s.x, s.y]);
+                                                 return (
+                                                     <g key={isSelected ? 'selected' : 'hovered'} className={`diagram-station-node ${isSelected ? 'is-selected' : 'is-hovered'}`} opacity={1} style={{ pointerEvents: 'auto', '--node-color': st.color }}>
+                                                         <circle className="diagram-station-glow" cx={cx} cy={cy} r={r * 2.9} fill={st.color} />
+                                                         <circle className="diagram-station-ring" cx={cx} cy={cy} r={r * 1.35} fill="none" stroke={st.color} strokeWidth={0.22 * zoomScale} />
+                                                         <circle className="diagram-station-dot" cx={cx} cy={cy} r={Math.max(0.55 * zoomScale, r * 0.72)} fill={st.color} stroke="#fff" strokeWidth={0.2 * zoomScale} style={{ cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setSelectedStation(s); }} />
+                                                         <text x={cx} y={cy - r - 1.0 * zoomScale} className="station-label" textAnchor="middle" style={{fontSize: `${1.8 * zoomScale}px`, fontWeight: 'bold'}}>{s.name}</text>
+                                                     </g>
+                                                 );
                                             });
                                         })()}
                                     </svg>
                                 </>
                             )}
-                            <div className="context-overlay" onClick={e => e.stopPropagation()}>
-                                <div className="weather-info">🗓️ {selectedDate} ({String(currentTime).padStart(2, '0')}:00)</div>
-                                <div className="weather-info"><span className="icon">{currentWeather.condition === 'Rainy' ? '🌧️' : currentWeather.condition === 'Sunny' ? '☀️' : currentWeather.condition === 'Cloudy' ? '☁️' : currentWeather.condition === 'Night' ? '🌙' : '✨'}</span><span>{currentWeather.temp}°C, {currentWeather.condition}</span></div>
-                            </div>
+                             <div className="context-overlay" onClick={e => e.stopPropagation()}>
+                                 <div className="weather-info">{selectedDate} ({hourLabel(currentTime)})</div>
+                                 <div className="weather-info"><span>{currentWeather.temp}C, {currentWeather.condition}</span><strong>{currentWeatherStyle.label}</strong></div>
+                                 {(currentWeatherEvent.rainMm > 0 || currentWeatherEvent.snowCm > 0 || currentWeatherEvent.newSnowCm > 0) && (
+                                     <div className="weather-info subtle-weather">
+                                         <span>Rain {currentWeatherEvent.rainMm}mm</span>
+                                         <span>Snow {currentWeatherEvent.snowCm}cm</span>
+                                     </div>
+                                 )}
+                             </div>
+                             {hoveredStation && !selectedStation && (
+                                 <div className="hover-preview-panel" onClick={e => e.stopPropagation()}>
+                                     <strong>{hoveredStation.name}</strong>
+                                     <span>{getStationTypeLabel(hoveredStation.station_type)}</span>
+                                     <RhythmBand values={hoveredStation.hourly_congestion || []} currentTime={currentTime} weatherEvents={hourlyWeatherEvents} onHourChange={setCurrentTime} compact />
+                                 </div>
+                             )}
                             <div className="map-legend" onClick={e => e.stopPropagation()}>
-                                <span className="legend-title">{viewMode.toUpperCase()} %</span>
+                                <span className="legend-title">{viewMode === 'congestion' ? 'Station Load' : viewMode === 'inflowOutflow' ? 'Flow Direction' : viewMode === 'train' ? 'Train Saturation' : 'Station Pattern'}</span>
                                 {viewMode === 'congestion' ? (
                                     <>
                                         <div className={`legend-item ${legendHighlight === 'crowded' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'crowded' ? null : 'crowded')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'crowded' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
@@ -987,22 +1552,25 @@ function App() {
                                 ) : viewMode === 'inflowOutflow' ? (
                                     <>
                                         <div className={`legend-item ${legendHighlight === 'inflow' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'inflow' ? null : 'inflow')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'inflow' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#e6550d'}}></div><span>Inflow</span>
+                                            <div className="color-box" style={{backgroundColor: '#e6550d'}}></div><span>Inflow Dominant</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'outflow' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'outflow' ? null : 'outflow')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'outflow' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#3182bd'}}></div><span>Outflow</span>
+                                            <div className="color-box" style={{backgroundColor: '#3182bd'}}></div><span>Outflow Dominant</span>
                                         </div>
                                     </>
                                 ) : (
                                     <>
                                         <div className={`legend-item ${legendHighlight === 'business' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'business' ? null : 'business')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'business' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#e67e22'}}></div><span>Business Area</span>
+                                            <div className="color-box" style={{backgroundColor: TYPE_COLORS.Business}}></div><span>Morning Inflow</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'residential' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'residential' ? null : 'residential')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'residential' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#2ecc71'}}></div><span>Residential Area</span>
+                                            <div className="color-box" style={{backgroundColor: TYPE_COLORS.Residential}}></div><span>Morning Outflow</span>
+                                        </div>
+                                        <div className={`legend-item ${legendHighlight === 'commercial-night' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'commercial-night' ? null : 'commercial-night')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'commercial-night' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
+                                            <div className="color-box" style={{backgroundColor: TYPE_COLORS['Commercial Night']}}></div><span>Commercial Night</span>
                                         </div>
                                         <div className={`legend-item ${legendHighlight === 'mixed' ? 'active' : ''}`} onClick={() => setLegendHighlight(p => p === 'mixed' ? null : 'mixed')} style={{cursor:'pointer', padding:'2px 5px', borderRadius:'4px', transition:'all 0.2s', background: legendHighlight === 'mixed' ? 'rgba(0,0,0,0.05)' : 'transparent'}}>
-                                            <div className="color-box" style={{backgroundColor: '#95a5a6'}}></div><span>Mixed Zone</span>
+                                            <div className="color-box" style={{backgroundColor: TYPE_COLORS.Mixed}}></div><span>Mixed Flow</span>
                                         </div>
                                     </>
                                 )}
@@ -1017,17 +1585,62 @@ function App() {
                                 </div>
                             )}
                         </div>
-                        <div className="time-slider">Time: <strong>{currentTime}:00</strong><input type="range" min="0" max="23" value={currentTime} onChange={e => setCurrentTime(Number(e.target.value))} /></div>
+                        <div className="time-slider">
+                            <div className="time-slider-head">
+                                <button className={`play-button ${isPlaying ? 'active' : ''}`} onClick={() => setIsPlaying((prev) => !prev)}>
+                                    {isPlaying ? 'Pause' : 'Play Day'}
+                                </button>
+                                <div><span>Time</span><strong>{hourLabel(currentTime)}</strong></div>
+                                <div><span>Weather</span><strong>{currentWeatherStyle.label}</strong></div>
+                            </div>
+                            <input type="range" min="0" max="23" value={currentTime} onChange={e => { setCurrentTime(Number(e.target.value)); setWeatherFocusHour(null); }} />
+                            <WeatherImpactTimeline
+                                events={hourlyWeatherEvents}
+                                values={overview?.hourlyNetworkLoad || []}
+                                currentTime={currentTime}
+                                onHourChange={(hour, event) => {
+                                    setCurrentTime(hour);
+                                    setWeatherFocusHour(event.weatherImpact === 'Dry' ? null : hour);
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
                 <div className="right-section" onClick={e => e.stopPropagation()}>
                     <div className="dashboard-panel">
                         {selectedStation ? (
                             <div className="dashboard-content">
-                                <div className="station-header"><h3>{selectedStation.name}</h3><span className="type-badge">{selectedStation.station_type}</span></div>
+                                <LiveNowCard station={selectedStation} areaMap={selectedAreaMap} status={liveStatus} data={liveCityData} />
+                                <div className="station-header">
+                                    <div>
+                                        <h3>{selectedStation.name}</h3>
+                                        <span>{selectedStation.lines?.join(', ')}</span>
+                                    </div>
+                                    <span className="type-badge" style={{ backgroundColor: TYPE_COLORS[selectedStation.station_type] || TYPE_COLORS.Mixed }}>{getStationTypeLabel(selectedStation.station_type)}</span>
+                                </div>
+                                <div className="chart-container compact-chart">
+                                    <h4>24h Rhythm Band</h4>
+                                    <RhythmBand values={selectedStation.hourly_congestion || []} currentTime={currentTime} weatherEvents={hourlyWeatherEvents} onHourChange={setCurrentTime} />
+                                </div>
+                                <div className="chart-container compact-chart">
+                                    <h4>Flow Balance Diverging Bar</h4>
+                                    <FlowBalanceBars station={selectedStation} currentTime={currentTime} onHourChange={setCurrentTime} />
+                                </div>
+                                <div className="chart-container compact-chart">
+                                    <h4>Weather Impact Timeline</h4>
+                                    <WeatherImpactTimeline
+                                        events={hourlyWeatherEvents}
+                                        values={selectedStation.hourly_congestion || []}
+                                        currentTime={currentTime}
+                                        onHourChange={(hour, event) => {
+                                            setCurrentTime(hour);
+                                            setWeatherFocusHour(event.weatherImpact === 'Dry' ? null : hour);
+                                        }}
+                                    />
+                                </div>
                                 <div className="chart-container">
-                                    <h4>Hourly Congestion (vs Last Week)</h4>
-                                    <h5>(Number of getting on - getting off on the subway)</h5>
+                                    <h4>Station Load vs Last Week</h4>
+                                    <h5>Total hourly entries and exits</h5>
                                     <svg viewBox="0 0 350 225" className="chart-svg">
                                         <text x="180" y="215" fontSize="10" fill="#95a5a6" textAnchor="middle">Time (Hour)</text>
                                         <text x="5" y="105" fontSize="10" fill="#95a5a6" textAnchor="middle" transform="rotate(-90 5,105)">Congestion</text>
@@ -1056,7 +1669,7 @@ function App() {
                                 </div>
                                 <div className="chart-container">
                                     <h4>Stay Tendency</h4>
-                                    <h5>(Number of getting on + getting off on the subway)</h5>
+                                    <h5>Inflow minus outflow</h5>
                                     <svg viewBox="0 0 350 225" className="chart-svg">
                                         <text x="180" y="215" fontSize="10" fill="#95a5a6" textAnchor="middle">Time (Hour)</text>
                                         <text x="10" y="105" fontSize="10" fill="#95a5a6" textAnchor="middle" transform="rotate(-90 10,105)">Flow Balance</text>
@@ -1123,15 +1736,19 @@ function App() {
                                         </svg>
                                     </div>
                                 ))}
-                                <div className="similar-stations-container">
-                                    <h4>Similar Stations (Pattern + Volume)</h4>
-                                    <ul className="similar-list">
-                                        {selectedStation.similar_stations?.map((sim, i) => (<li key={i}><span>{sim.name}</span><strong>{sim.score}%</strong></li>))}
-                                    </ul>
+                                <div className="chart-container orbit-container">
+                                    <h4>Similar Station Orbit</h4>
+                                    <SimilarStationOrbit station={selectedStation} onCompare={setCompareStationName} />
                                 </div>
+                                <ComparePanel
+                                    station={selectedStation}
+                                    compareStation={compareStation}
+                                    compareName={compareStationName}
+                                    onCompareChange={setCompareStationName}
+                                />
                             </div>
                         ) : (
-                            <div className="empty-selection"><div className="empty-icon">📍</div><p>Select a station on the map</p></div>
+                            <OverviewPanel overview={overview} currentTime={currentTime} weatherEvents={hourlyWeatherEvents} onHourChange={setCurrentTime} />
                         )}
                     </div>
                 </div>

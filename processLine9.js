@@ -12,7 +12,7 @@ function cleanName(name) {
     return name.replace(/\(.*\)/g, '').replace(/역$/, '').trim();
 }
 
-function processLine9Excel(filePath, year) {
+function processLine9Excel(filePath) {
     const workbook = XLSX.readFile(filePath);
     const result = {};
 
@@ -79,8 +79,8 @@ function processLine9Excel(filePath, year) {
     return result;
 }
 
-const line9_2023 = processLine9Excel(path.join(__dirname, 'data', '2023년 9호선 역별 시간별 혼잡도 자료.xlsx'), 2023);
-const line9_2024 = processLine9Excel(path.join(__dirname, 'data', '2024년 9호선 역별 시간별 혼잡도 자료.xlsx'), 2024);
+const line9_2023 = processLine9Excel(path.join(__dirname, 'data', '2023년 9호선 역별 시간별 혼잡도 자료.xlsx'));
+const line9_2024 = processLine9Excel(path.join(__dirname, 'data', '2024년 9호선 역별 시간별 혼잡도 자료.xlsx'));
 
 fs.writeFileSync(path.join(__dirname, 'data', 'line9_processed.json'), JSON.stringify({
     "2023": line9_2023,

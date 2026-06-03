@@ -1,0 +1,847 @@
+# Seoul Real-Time City Data API smoke test
+requestUrl=http://openapi.seoul.go.kr:8088/<redacted>/json/citydata/1/5/%EA%B0%95%EB%82%A8%EC%97%AD
+area=강남역
+type=json
+httpStatus=200
+contentType=application/json;charset=UTF-8
+responseBytes=132820
+
+## API result metadata
+{
+  "result": {
+    "RESULT.CODE": "INFO-000",
+    "RESULT.MESSAGE": "정상 처리되었습니다."
+  },
+  "topLevelKeys": [
+    "list_total_count",
+    "RESULT",
+    "CITYDATA"
+  ],
+  "citydataKeys": null,
+  "listTotalCount": 1
+}
+
+## CITYDATA overview
+{
+  "type": "object",
+  "areaName": "강남역",
+  "areaCode": "POI014",
+  "keys": [
+    {
+      "key": "AREA_NM",
+      "hint": "핫스팟 장소명",
+      "type": "string",
+      "sample": "강남역"
+    },
+    {
+      "key": "AREA_CD",
+      "hint": "핫스팟 코드",
+      "type": "string",
+      "sample": "POI014"
+    },
+    {
+      "key": "LIVE_PPLTN_STTS",
+      "hint": "실시간 인구현황",
+      "type": "array",
+      "length": 1,
+      "sample": "{\"AREA_NM\":\"강남역\",\"AREA_CD\":\"POI014\",\"AREA_CONGEST_LVL\":\"붐빔\",\"AREA_CONGEST_MSG\":\"사람들이 몰려있을 ..."
+    },
+    {
+      "key": "ROAD_TRAFFIC_STTS",
+      "hint": "도로소통현황",
+      "type": "object",
+      "sample": "{\"AVG_ROAD_DATA\":{\"ROAD_MSG\":\"해당 장소로 이동·진입시 시간이 오래 걸릴 수 있어요.\",\"ROAD_TRAFFIC_IDX\":\"정체\",\"ROA..."
+    },
+    {
+      "key": "PRK_STTS",
+      "type": "array",
+      "length": 95,
+      "sample": "{\"PRK_NM\":\"서초 삼성쉐르빌2 주차장\",\"PRK_CD\":\"3041646\",\"PRK_TYPE\":\"BS\",\"CPCTY\":\"285\",\"CUR_PRK_CNT\":\"..."
+    },
+    {
+      "key": "SUB_STTS",
+      "hint": "지하철 실시간 도착 현황",
+      "type": "array",
+      "length": 4,
+      "sample": "{\"SUB_STN_NM\":\"신논현\",\"SUB_STN_LINE\":\"9\",\"SUB_STN_RADDR\":\"서울특별시 강남구 봉은사로 지하102\",\"SUB_STN_JIB..."
+    },
+    {
+      "key": "LIVE_SUB_PPLTN",
+      "type": "object",
+      "sample": "{\"SUB_ACML_GTON_PPLTN_MIN\":\"91500\",\"SUB_ACML_GTON_PPLTN_MAX\":\"91600\",\"SUB_ACML_GTOFF_PPLTN..."
+    },
+    {
+      "key": "BUS_STN_STTS",
+      "hint": "버스정류소 현황",
+      "type": "array",
+      "length": 43,
+      "sample": "{\"BUS_RESULT_MSG\":\"정상 호출되었습니다.\",\"BUS_STN_ID\":\"121000009\",\"BUS_ARS_ID\":\"22009\",\"BUS_STN_NM\"..."
+    },
+    {
+      "key": "LIVE_BUS_PPLTN",
+      "type": "object",
+      "sample": "{\"BUS_ACML_GTON_PPLTN_MIN\":\"29300\",\"BUS_ACML_GTON_PPLTN_MAX\":\"29400\",\"BUS_ACML_GTOFF_PPLTN..."
+    },
+    {
+      "key": "ACDNT_CNTRL_STTS",
+      "hint": "사고/통제 현황",
+      "type": "array",
+      "length": 0,
+      "sample": "undefined"
+    },
+    {
+      "key": "SBIKE_STTS",
+      "hint": "따릉이 현황",
+      "type": "array",
+      "length": 5,
+      "sample": "{\"SBIKE_SPOT_NM\":\"2421. 신논현역 4번출구\",\"SBIKE_SPOT_ID\":\"ST-1887\",\"SBIKE_SHARED\":\"13\",\"SBIKE_PA..."
+    },
+    {
+      "key": "WEATHER_STTS",
+      "hint": "날씨 현황",
+      "type": "array",
+      "length": 1,
+      "sample": "{\"WEATHER_TIME\":\"2026-06-02 18:50\",\"TEMP\":\"29.3\",\"MAX_TEMP\":\"32.0\",\"MIN_TEMP\":\"20.0\",\"HUMI..."
+    },
+    {
+      "key": "CHARGER_STTS",
+      "hint": "전기차 충전소 현황",
+      "type": "array",
+      "length": 50,
+      "sample": "{\"STAT_NM\":\"BMW차징스테이션 강남역1차아이파크\",\"STAT_ID\":\"PI747541\",\"STAT_ADDR\":\"서울특별시 서초구 서초대로77길 62\",\"..."
+    },
+    {
+      "key": "EVENT_STTS",
+      "hint": "문화행사/이벤트 현황",
+      "type": "array",
+      "length": 0,
+      "sample": "undefined"
+    },
+    {
+      "key": "LIVE_CMRCL_STTS",
+      "type": "object",
+      "sample": "{\"AREA_CMRCL_LVL\":\"분주한\",\"AREA_SH_PAYMENT_CNT\":\"414\",\"AREA_SH_PAYMENT_AMT_MIN\":25000000,\"AR..."
+    },
+    {
+      "key": "LIVE_DST_MESSAGE",
+      "type": "array",
+      "length": 0,
+      "sample": "undefined"
+    },
+    {
+      "key": "LIVE_YNA_NEWS",
+      "type": "array",
+      "length": 0,
+      "sample": "undefined"
+    }
+  ]
+}
+
+## Nested schema sample
+{
+  "type": "object",
+  "keys": [
+    {
+      "key": "AREA_NM",
+      "hint": "핫스팟 장소명",
+      "type": "string",
+      "sample": "강남역"
+    },
+    {
+      "key": "AREA_CD",
+      "hint": "핫스팟 코드",
+      "type": "string",
+      "sample": "POI014"
+    },
+    {
+      "key": "LIVE_PPLTN_STTS",
+      "hint": "실시간 인구현황",
+      "type": "array",
+      "length": 1,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "AREA_NM",
+            "hint": "핫스팟 장소명",
+            "type": "string",
+            "sample": "강남역"
+          },
+          {
+            "key": "AREA_CD",
+            "hint": "핫스팟 코드",
+            "type": "string",
+            "sample": "POI014"
+          },
+          {
+            "key": "AREA_CONGEST_LVL",
+            "type": "string",
+            "sample": "붐빔"
+          },
+          {
+            "key": "AREA_CONGEST_MSG",
+            "type": "string",
+            "sample": "사람들이 몰려있을 가능성이 매우 크고 많이 붐빈다고 느낄 수 있어요. 인구밀도가 높은 구간에서는 도보 이동시 부딪힘이 발생할 수 있어요."
+          },
+          {
+            "key": "AREA_PPLTN_MIN",
+            "type": "string",
+            "sample": "82000"
+          },
+          {
+            "key": "AREA_PPLTN_MAX",
+            "type": "string",
+            "sample": "84000"
+          },
+          {
+            "key": "MALE_PPLTN_RATE",
+            "type": "string",
+            "sample": "48.9"
+          },
+          {
+            "key": "FEMALE_PPLTN_RATE",
+            "type": "string",
+            "sample": "51.1"
+          },
+          {
+            "key": "PPLTN_RATE_0",
+            "type": "string",
+            "sample": "0.6"
+          },
+          {
+            "key": "PPLTN_RATE_10",
+            "type": "string",
+            "sample": "4.4"
+          },
+          {
+            "key": "PPLTN_RATE_20",
+            "type": "string",
+            "sample": "27.1"
+          },
+          {
+            "key": "PPLTN_RATE_30",
+            "type": "string",
+            "sample": "28.2"
+          }
+        ]
+      }
+    },
+    {
+      "key": "ROAD_TRAFFIC_STTS",
+      "hint": "도로소통현황",
+      "type": "object",
+      "keys": [
+        {
+          "key": "AVG_ROAD_DATA",
+          "type": "object",
+          "keys": [
+            {
+              "key": "ROAD_MSG",
+              "type": "string",
+              "sample": "해당 장소로 이동·진입시 시간이 오래 걸릴 수 있어요."
+            },
+            {
+              "key": "ROAD_TRAFFIC_IDX",
+              "type": "string",
+              "sample": "정체"
+            },
+            {
+              "key": "ROAD_TRAFFIC_SPD",
+              "type": "number",
+              "sample": "12"
+            },
+            {
+              "key": "ROAD_TRAFFIC_TIME",
+              "type": "string",
+              "sample": "2026-06-02 18:50"
+            }
+          ]
+        },
+        {
+          "key": "ROAD_TRAFFIC_STTS",
+          "hint": "도로소통현황",
+          "type": "array",
+          "length": 65,
+          "item": {
+            "type": "object",
+            "keys": [
+              "LINK_ID",
+              "ROAD_NM",
+              "START_ND_CD",
+              "START_ND_NM",
+              "START_ND_XY",
+              "END_ND_CD",
+              "END_ND_NM",
+              "END_ND_XY",
+              "DIST",
+              "SPD",
+              "IDX",
+              "XYLIST"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "key": "PRK_STTS",
+      "type": "array",
+      "length": 95,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "PRK_NM",
+            "type": "string",
+            "sample": "서초 삼성쉐르빌2 주차장"
+          },
+          {
+            "key": "PRK_CD",
+            "type": "string",
+            "sample": "3041646"
+          },
+          {
+            "key": "PRK_TYPE",
+            "type": "string",
+            "sample": "BS"
+          },
+          {
+            "key": "CPCTY",
+            "type": "string",
+            "sample": "285"
+          },
+          {
+            "key": "CUR_PRK_CNT",
+            "type": "string",
+            "sample": ""
+          },
+          {
+            "key": "CUR_PRK_TIME",
+            "type": "string",
+            "sample": ""
+          },
+          {
+            "key": "CUR_PRK_YN",
+            "type": "string",
+            "sample": "N"
+          },
+          {
+            "key": "PAY_YN",
+            "type": "string",
+            "sample": "Y"
+          },
+          {
+            "key": "RATES",
+            "type": "string",
+            "sample": "10000"
+          },
+          {
+            "key": "TIME_RATES",
+            "type": "string",
+            "sample": "30"
+          },
+          {
+            "key": "ADD_RATES",
+            "type": "string",
+            "sample": "2000"
+          },
+          {
+            "key": "ADD_TIME_RATES",
+            "type": "string",
+            "sample": "10"
+          }
+        ]
+      }
+    },
+    {
+      "key": "SUB_STTS",
+      "hint": "지하철 실시간 도착 현황",
+      "type": "array",
+      "length": 4,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "SUB_STN_NM",
+            "type": "string",
+            "sample": "신논현"
+          },
+          {
+            "key": "SUB_STN_LINE",
+            "type": "string",
+            "sample": "9"
+          },
+          {
+            "key": "SUB_STN_RADDR",
+            "type": "string",
+            "sample": "서울특별시 강남구 봉은사로 지하102"
+          },
+          {
+            "key": "SUB_STN_JIBUN",
+            "type": "null",
+            "sample": "null"
+          },
+          {
+            "key": "SUB_STN_X",
+            "type": "string",
+            "sample": "127.02506"
+          },
+          {
+            "key": "SUB_STN_Y",
+            "type": "string",
+            "sample": "37.504598"
+          },
+          {
+            "key": "SUB_DETAIL",
+            "type": "array",
+            "length": 4,
+            "item": {
+              "type": "object",
+              "keys": [
+                "SUB_NT_STN",
+                "SUB_BF_STN",
+                "SUB_ROUTE_NM",
+                "SUB_LINE",
+                "SUB_ORD",
+                "SUB_DIR",
+                "SUB_TERMINAL",
+                "SUB_ARVTIME",
+                "SUB_ARMG1",
+                "SUB_ARMG2",
+                "SUB_ARVINFO"
+              ]
+            }
+          },
+          {
+            "key": "SUB_FACIINFO",
+            "type": "array",
+            "length": 0,
+            "item": null
+          }
+        ]
+      }
+    },
+    {
+      "key": "LIVE_SUB_PPLTN",
+      "type": "object",
+      "keys": [
+        {
+          "key": "SUB_ACML_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "91500"
+        },
+        {
+          "key": "SUB_ACML_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "91600"
+        },
+        {
+          "key": "SUB_ACML_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "135900"
+        },
+        {
+          "key": "SUB_ACML_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "136000"
+        },
+        {
+          "key": "SUB_30WTHN_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "14300"
+        },
+        {
+          "key": "SUB_30WTHN_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "14400"
+        },
+        {
+          "key": "SUB_30WTHN_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "7400"
+        },
+        {
+          "key": "SUB_30WTHN_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "7500"
+        },
+        {
+          "key": "SUB_10WTHN_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "4500"
+        },
+        {
+          "key": "SUB_10WTHN_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "4600"
+        },
+        {
+          "key": "SUB_10WTHN_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "2700"
+        },
+        {
+          "key": "SUB_10WTHN_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "2800"
+        }
+      ]
+    },
+    {
+      "key": "BUS_STN_STTS",
+      "hint": "버스정류소 현황",
+      "type": "array",
+      "length": 43,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "BUS_RESULT_MSG",
+            "type": "string",
+            "sample": "정상 호출되었습니다."
+          },
+          {
+            "key": "BUS_STN_ID",
+            "type": "string",
+            "sample": "121000009"
+          },
+          {
+            "key": "BUS_ARS_ID",
+            "type": "string",
+            "sample": "22009"
+          },
+          {
+            "key": "BUS_STN_NM",
+            "type": "string",
+            "sample": "신분당선강남역"
+          },
+          {
+            "key": "BUS_STN_X",
+            "type": "string",
+            "sample": "127.0285365859"
+          },
+          {
+            "key": "BUS_STN_Y",
+            "type": "string",
+            "sample": "37.4958485587"
+          }
+        ]
+      }
+    },
+    {
+      "key": "LIVE_BUS_PPLTN",
+      "type": "object",
+      "keys": [
+        {
+          "key": "BUS_ACML_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "29300"
+        },
+        {
+          "key": "BUS_ACML_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "29400"
+        },
+        {
+          "key": "BUS_ACML_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "27500"
+        },
+        {
+          "key": "BUS_ACML_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "27600"
+        },
+        {
+          "key": "BUS_30WTHN_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "1800"
+        },
+        {
+          "key": "BUS_30WTHN_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "1900"
+        },
+        {
+          "key": "BUS_30WTHN_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "1700"
+        },
+        {
+          "key": "BUS_30WTHN_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "1800"
+        },
+        {
+          "key": "BUS_10WTHN_GTON_PPLTN_MIN",
+          "type": "string",
+          "sample": "750"
+        },
+        {
+          "key": "BUS_10WTHN_GTON_PPLTN_MAX",
+          "type": "string",
+          "sample": "800"
+        },
+        {
+          "key": "BUS_10WTHN_GTOFF_PPLTN_MIN",
+          "type": "string",
+          "sample": "750"
+        },
+        {
+          "key": "BUS_10WTHN_GTOFF_PPLTN_MAX",
+          "type": "string",
+          "sample": "800"
+        }
+      ]
+    },
+    {
+      "key": "ACDNT_CNTRL_STTS",
+      "hint": "사고/통제 현황",
+      "type": "array",
+      "length": 0,
+      "item": null
+    },
+    {
+      "key": "SBIKE_STTS",
+      "hint": "따릉이 현황",
+      "type": "array",
+      "length": 5,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "SBIKE_SPOT_NM",
+            "type": "string",
+            "sample": "2421. 신논현역 4번출구"
+          },
+          {
+            "key": "SBIKE_SPOT_ID",
+            "type": "string",
+            "sample": "ST-1887"
+          },
+          {
+            "key": "SBIKE_SHARED",
+            "type": "string",
+            "sample": "13"
+          },
+          {
+            "key": "SBIKE_PARKING_CNT",
+            "type": "string",
+            "sample": "2"
+          },
+          {
+            "key": "SBIKE_RACK_CNT",
+            "type": "string",
+            "sample": "15"
+          },
+          {
+            "key": "SBIKE_X",
+            "type": "number",
+            "sample": "127.02579498"
+          },
+          {
+            "key": "SBIKE_Y",
+            "type": "number",
+            "sample": "37.504673"
+          }
+        ]
+      }
+    },
+    {
+      "key": "WEATHER_STTS",
+      "hint": "날씨 현황",
+      "type": "array",
+      "length": 1,
+      "item": {
+        "type": "object",
+        "keys": [
+          {
+            "key": "WEATHER_TIME",
+            "type": "string",
+            "sample": "2026-06-02 18:50"
+          },
+          {
+            "key": "TEMP",
+            "type": "string",
+            "sample": "29.3"
+          },
+          {
+            "key": "MAX_TEMP",
+            "type": "string",
+            "sample": "32.0"
+          },
+          {
+            "key": "MIN_TEMP",
+            "type": "string",
+            "sample": "20.0"
+          },
+          {
+            "key": "HUMIDITY",
+            "type": "string",
+            "sample": "46"
+          },
+          {
+            "key": "WIND_DIRCT",
+            "type": "string",
+            "sample": "ESE"
+          },
+          {
+            "key": "WIND_SPD",
+            "type": "string",
+            "sample": "1.0"
+          },
+          {
+            "key": "PRECIPITATION",
+            "type": "string",
+            "sample": "-"
+          },
+          {
+            "key": "PRECPT_TYPE",
+            "type": "string",
+            "sample": "없음"
+          },
+          {
+            "key": "PCP_MSG",
+            "type": "string",
+            "sample": "비 또는 눈 소식이 없어요."
+          },
+          {
+            "key": "SUNRISE",
+            "type": "string",
+            "sample": "05:12"
+          },
+          {
+            "key": "SUNSET",
+            "type": "string",
+            "sample": "19:48"
+          }
+        ]
+      }
+    }
+  ]
+}
+
+## Flattened field catalog
+┌─────────┬─────────────────────────────────────────────────────┬──────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ (index) │ path                                                │ type     │ sample                                                                                                                                                                                                                                                                          │
+├─────────┼─────────────────────────────────────────────────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 0       │ '<root>'                                            │ 'object' │ 'keys=AREA_NM, AREA_CD, LIVE_PPLTN_STTS, ROAD_TRAFFIC_STTS, PRK_STTS, SUB_STTS, LIVE_SUB_PPLTN, BUS_STN_STTS, LIVE_BUS_PPLTN, ACDNT_CNTRL_STTS'                                                                                                                                 │
+│ 1       │ 'AREA_NM'                                           │ 'string' │ '강남역'                                                                                                                                                                                                                                                                        │
+│ 2       │ 'AREA_CD'                                           │ 'string' │ 'POI014'                                                                                                                                                                                                                                                                        │
+│ 3       │ 'LIVE_PPLTN_STTS'                                   │ 'array'  │ 'length=1'                                                                                                                                                                                                                                                                      │
+│ 4       │ 'LIVE_PPLTN_STTS[]'                                 │ 'object' │ 'keys=AREA_NM, AREA_CD, AREA_CONGEST_LVL, AREA_CONGEST_MSG, AREA_PPLTN_MIN, AREA_PPLTN_MAX, MALE_PPLTN_RATE, FEMALE_PPLTN_RATE, PPLTN_RATE_0, PPLTN_RATE_10'                                                                                                                    │
+│ 5       │ 'LIVE_PPLTN_STTS[].AREA_NM'                         │ 'string' │ '강남역'                                                                                                                                                                                                                                                                        │
+│ 6       │ 'LIVE_PPLTN_STTS[].AREA_CD'                         │ 'string' │ 'POI014'                                                                                                                                                                                                                                                                        │
+│ 7       │ 'LIVE_PPLTN_STTS[].AREA_CONGEST_LVL'                │ 'string' │ '붐빔'                                                                                                                                                                                                                                                                          │
+│ 8       │ 'LIVE_PPLTN_STTS[].AREA_CONGEST_MSG'                │ 'string' │ '사람들이 몰려있을 가능성이 매우 크고 많이 붐빈다고 느낄 수 있어요. 인구밀도가 높은 구간에서는 도보 이동시 부딪힘이 발생할 수 있어요.'                                                                                                                                          │
+│ 9       │ 'LIVE_PPLTN_STTS[].AREA_PPLTN_MIN'                  │ 'string' │ '82000'                                                                                                                                                                                                                                                                         │
+│ 10      │ 'LIVE_PPLTN_STTS[].AREA_PPLTN_MAX'                  │ 'string' │ '84000'                                                                                                                                                                                                                                                                         │
+│ 11      │ 'LIVE_PPLTN_STTS[].MALE_PPLTN_RATE'                 │ 'string' │ '48.9'                                                                                                                                                                                                                                                                          │
+│ 12      │ 'LIVE_PPLTN_STTS[].FEMALE_PPLTN_RATE'               │ 'string' │ '51.1'                                                                                                                                                                                                                                                                          │
+│ 13      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_0'                    │ 'string' │ '0.6'                                                                                                                                                                                                                                                                           │
+│ 14      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_10'                   │ 'string' │ '4.4'                                                                                                                                                                                                                                                                           │
+│ 15      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_20'                   │ 'string' │ '27.1'                                                                                                                                                                                                                                                                          │
+│ 16      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_30'                   │ 'string' │ '28.2'                                                                                                                                                                                                                                                                          │
+│ 17      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_40'                   │ 'string' │ '20.1'                                                                                                                                                                                                                                                                          │
+│ 18      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_50'                   │ 'string' │ '11.9'                                                                                                                                                                                                                                                                          │
+│ 19      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_60'                   │ 'string' │ '4.9'                                                                                                                                                                                                                                                                           │
+│ 20      │ 'LIVE_PPLTN_STTS[].PPLTN_RATE_70'                   │ 'string' │ '2.9'                                                                                                                                                                                                                                                                           │
+│ 21      │ 'LIVE_PPLTN_STTS[].RESNT_PPLTN_RATE'                │ 'string' │ '30.2'                                                                                                                                                                                                                                                                          │
+│ 22      │ 'LIVE_PPLTN_STTS[].NON_RESNT_PPLTN_RATE'            │ 'string' │ '69.8'                                                                                                                                                                                                                                                                          │
+│ 23      │ 'LIVE_PPLTN_STTS[].REPLACE_YN'                      │ 'string' │ 'N'                                                                                                                                                                                                                                                                             │
+│ 24      │ 'LIVE_PPLTN_STTS[].PPLTN_TIME'                      │ 'string' │ '2026-06-02 18:20'                                                                                                                                                                                                                                                              │
+│ 25      │ 'LIVE_PPLTN_STTS[].FCST_YN'                         │ 'string' │ 'Y'                                                                                                                                                                                                                                                                             │
+│ 26      │ 'LIVE_PPLTN_STTS[].FCST_PPLTN'                      │ 'array'  │ 'length=12'                                                                                                                                                                                                                                                                     │
+│ 27      │ 'LIVE_PPLTN_STTS[].FCST_PPLTN[]'                    │ 'object' │ 'keys=FCST_TIME, FCST_CONGEST_LVL, FCST_PPLTN_MIN, FCST_PPLTN_MAX'                                                                                                                                                                                                              │
+│ 28      │ 'ROAD_TRAFFIC_STTS'                                 │ 'object' │ 'keys=AVG_ROAD_DATA, ROAD_TRAFFIC_STTS'                                                                                                                                                                                                                                         │
+│ 29      │ 'ROAD_TRAFFIC_STTS.AVG_ROAD_DATA'                   │ 'object' │ 'keys=ROAD_MSG, ROAD_TRAFFIC_IDX, ROAD_TRAFFIC_SPD, ROAD_TRAFFIC_TIME'                                                                                                                                                                                                          │
+│ 30      │ 'ROAD_TRAFFIC_STTS.AVG_ROAD_DATA.ROAD_MSG'          │ 'string' │ '해당 장소로 이동·진입시 시간이 오래 걸릴 수 있어요.'                                                                                                                                                                                                                           │
+│ 31      │ 'ROAD_TRAFFIC_STTS.AVG_ROAD_DATA.ROAD_TRAFFIC_IDX'  │ 'string' │ '정체'                                                                                                                                                                                                                                                                          │
+│ 32      │ 'ROAD_TRAFFIC_STTS.AVG_ROAD_DATA.ROAD_TRAFFIC_SPD'  │ 'number' │ '12'                                                                                                                                                                                                                                                                            │
+│ 33      │ 'ROAD_TRAFFIC_STTS.AVG_ROAD_DATA.ROAD_TRAFFIC_TIME' │ 'string' │ '2026-06-02 18:50'                                                                                                                                                                                                                                                              │
+│ 34      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS'               │ 'array'  │ 'length=65'                                                                                                                                                                                                                                                                     │
+│ 35      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[]'             │ 'object' │ 'keys=LINK_ID, ROAD_NM, START_ND_CD, START_ND_NM, START_ND_XY, END_ND_CD, END_ND_NM, END_ND_XY, DIST, SPD'                                                                                                                                                                      │
+│ 36      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].LINK_ID'     │ 'string' │ '1210020001'                                                                                                                                                                                                                                                                    │
+│ 37      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].ROAD_NM'     │ 'string' │ '사임당로'                                                                                                                                                                                                                                                                      │
+│ 38      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].START_ND_CD' │ 'string' │ '1210415300'                                                                                                                                                                                                                                                                    │
+│ 39      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].START_ND_NM' │ 'string' │ '서초동 1419'                                                                                                                                                                                                                                                                   │
+│ 40      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].START_ND_XY' │ 'string' │ '127.0292323976334075_37.4928850031516703'                                                                                                                                                                                                                                      │
+│ 41      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].END_ND_CD'   │ 'string' │ '1220006304'                                                                                                                                                                                                                                                                    │
+│ 42      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].END_ND_NM'   │ 'string' │ '우성아파트앞사거리'                                                                                                                                                                                                                                                            │
+│ 43      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].END_ND_XY'   │ 'string' │ '127.0298809732350946_37.4930795966086521'                                                                                                                                                                                                                                      │
+│ 44      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].DIST'        │ 'string' │ '61.0'                                                                                                                                                                                                                                                                          │
+│ 45      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].SPD'         │ 'number' │ '16.3'                                                                                                                                                                                                                                                                          │
+│ 46      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].IDX'         │ 'string' │ '서행'                                                                                                                                                                                                                                                                          │
+│ 47      │ 'ROAD_TRAFFIC_STTS.ROAD_TRAFFIC_STTS[].XYLIST'      │ 'string' │ '127.0298809732350946_37.4930795966086521|127.0292323976334075_37.4928850031516703'                                                                                                                                                                                             │
+│ 48      │ 'PRK_STTS'                                          │ 'array'  │ 'length=95'                                                                                                                                                                                                                                                                     │
+│ 49      │ 'PRK_STTS[]'                                        │ 'object' │ 'keys=PRK_NM, PRK_CD, PRK_TYPE, CPCTY, CUR_PRK_CNT, CUR_PRK_TIME, CUR_PRK_YN, PAY_YN, RATES, TIME_RATES'                                                                                                                                                                        │
+│ 50      │ 'PRK_STTS[].PRK_NM'                                 │ 'string' │ '서초 삼성쉐르빌2 주차장'                                                                                                                                                                                                                                                       │
+│ 51      │ 'PRK_STTS[].PRK_CD'                                 │ 'string' │ '3041646'                                                                                                                                                                                                                                                                       │
+│ 52      │ 'PRK_STTS[].PRK_TYPE'                               │ 'string' │ 'BS'                                                                                                                                                                                                                                                                            │
+│ 53      │ 'PRK_STTS[].CPCTY'                                  │ 'string' │ '285'                                                                                                                                                                                                                                                                           │
+│ 54      │ 'PRK_STTS[].CUR_PRK_CNT'                            │ 'string' │ ''                                                                                                                                                                                                                                                                              │
+│ 55      │ 'PRK_STTS[].CUR_PRK_TIME'                           │ 'string' │ ''                                                                                                                                                                                                                                                                              │
+│ 56      │ 'PRK_STTS[].CUR_PRK_YN'                             │ 'string' │ 'N'                                                                                                                                                                                                                                                                             │
+│ 57      │ 'PRK_STTS[].PAY_YN'                                 │ 'string' │ 'Y'                                                                                                                                                                                                                                                                             │
+│ 58      │ 'PRK_STTS[].RATES'                                  │ 'string' │ '10000'                                                                                                                                                                                                                                                                         │
+│ 59      │ 'PRK_STTS[].TIME_RATES'                             │ 'string' │ '30'                                                                                                                                                                                                                                                                            │
+│ 60      │ 'PRK_STTS[].ADD_RATES'                              │ 'string' │ '2000'                                                                                                                                                                                                                                                                          │
+│ 61      │ 'PRK_STTS[].ADD_TIME_RATES'                         │ 'string' │ '10'                                                                                                                                                                                                                                                                            │
+│ 62      │ 'PRK_STTS[].ADDRESS'                                │ 'string' │ '서초구 서초동 1330-0'                                                                                                                                                                                                                                                          │
+│ 63      │ 'PRK_STTS[].ROAD_ADDR'                              │ 'string' │ ''                                                                                                                                                                                                                                                                              │
+│ 64      │ 'PRK_STTS[].LNG'                                    │ 'string' │ '127.027951'                                                                                                                                                                                                                                                                    │
+│ 65      │ 'PRK_STTS[].LAT'                                    │ 'string' │ '37.493925'                                                                                                                                                                                                                                                                     │
+│ 66      │ 'SUB_STTS'                                          │ 'array'  │ 'length=4'                                                                                                                                                                                                                                                                      │
+│ 67      │ 'SUB_STTS[]'                                        │ 'object' │ 'keys=SUB_STN_NM, SUB_STN_LINE, SUB_STN_RADDR, SUB_STN_JIBUN, SUB_STN_X, SUB_STN_Y, SUB_DETAIL, SUB_FACIINFO'                                                                                                                                                                   │
+│ 68      │ 'SUB_STTS[].SUB_STN_NM'                             │ 'string' │ '신논현'                                                                                                                                                                                                                                                                        │
+│ 69      │ 'SUB_STTS[].SUB_STN_LINE'                           │ 'string' │ '9'                                                                                                                                                                                                                                                                             │
+│ 70      │ 'SUB_STTS[].SUB_STN_RADDR'                          │ 'string' │ '서울특별시 강남구 봉은사로 지하102'                                                                                                                                                                                                                                            │
+│ 71      │ 'SUB_STTS[].SUB_STN_JIBUN'                          │ 'null'   │ 'null'                                                                                                                                                                                                                                                                          │
+│ 72      │ 'SUB_STTS[].SUB_STN_X'                              │ 'string' │ '127.02506'                                                                                                                                                                                                                                                                     │
+│ 73      │ 'SUB_STTS[].SUB_STN_Y'                              │ 'string' │ '37.504598'                                                                                                                                                                                                                                                                     │
+│ 74      │ 'SUB_STTS[].SUB_DETAIL'                             │ 'array'  │ 'length=4'                                                                                                                                                                                                                                                                      │
+│ 75      │ 'SUB_STTS[].SUB_DETAIL[]'                           │ 'object' │ 'keys=SUB_NT_STN, SUB_BF_STN, SUB_ROUTE_NM, SUB_LINE, SUB_ORD, SUB_DIR, SUB_TERMINAL, SUB_ARVTIME, SUB_ARMG1, SUB_ARMG2'                                                                                                                                                        │
+│ 76      │ 'SUB_STTS[].SUB_FACIINFO'                           │ 'array'  │ 'length=0'                                                                                                                                                                                                                                                                      │
+│ 77      │ 'LIVE_SUB_PPLTN'                                    │ 'object' │ 'keys=SUB_ACML_GTON_PPLTN_MIN, SUB_ACML_GTON_PPLTN_MAX, SUB_ACML_GTOFF_PPLTN_MIN, SUB_ACML_GTOFF_PPLTN_MAX, SUB_30WTHN_GTON_PPLTN_MIN, SUB_30WTHN_GTON_PPLTN_MAX, SUB_30WTHN_GTOFF_PPLTN_MIN, SUB_30WTHN_GTOFF_PPLTN_MAX, SUB_10WTHN_GTON_PPLTN_MIN, SUB_10WTHN_GTON_PPLTN_MAX' │
+│ 78      │ 'LIVE_SUB_PPLTN.SUB_ACML_GTON_PPLTN_MIN'            │ 'string' │ '91500'                                                                                                                                                                                                                                                                         │
+│ 79      │ 'LIVE_SUB_PPLTN.SUB_ACML_GTON_PPLTN_MAX'            │ 'string' │ '91600'                                                                                                                                                                                                                                                                         │
+│ 80      │ 'LIVE_SUB_PPLTN.SUB_ACML_GTOFF_PPLTN_MIN'           │ 'string' │ '135900'                                                                                                                                                                                                                                                                        │
+│ 81      │ 'LIVE_SUB_PPLTN.SUB_ACML_GTOFF_PPLTN_MAX'           │ 'string' │ '136000'                                                                                                                                                                                                                                                                        │
+│ 82      │ 'LIVE_SUB_PPLTN.SUB_30WTHN_GTON_PPLTN_MIN'          │ 'string' │ '14300'                                                                                                                                                                                                                                                                         │
+│ 83      │ 'LIVE_SUB_PPLTN.SUB_30WTHN_GTON_PPLTN_MAX'          │ 'string' │ '14400'                                                                                                                                                                                                                                                                         │
+│ 84      │ 'LIVE_SUB_PPLTN.SUB_30WTHN_GTOFF_PPLTN_MIN'         │ 'string' │ '7400'                                                                                                                                                                                                                                                                          │
+│ 85      │ 'LIVE_SUB_PPLTN.SUB_30WTHN_GTOFF_PPLTN_MAX'         │ 'string' │ '7500'                                                                                                                                                                                                                                                                          │
+│ 86      │ 'LIVE_SUB_PPLTN.SUB_10WTHN_GTON_PPLTN_MIN'          │ 'string' │ '4500'                                                                                                                                                                                                                                                                          │
+│ 87      │ 'LIVE_SUB_PPLTN.SUB_10WTHN_GTON_PPLTN_MAX'          │ 'string' │ '4600'                                                                                                                                                                                                                                                                          │
+│ 88      │ 'LIVE_SUB_PPLTN.SUB_10WTHN_GTOFF_PPLTN_MIN'         │ 'string' │ '2700'                                                                                                                                                                                                                                                                          │
+│ 89      │ 'LIVE_SUB_PPLTN.SUB_10WTHN_GTOFF_PPLTN_MAX'         │ 'string' │ '2800'                                                                                                                                                                                                                                                                          │
+│ 90      │ 'LIVE_SUB_PPLTN.SUB_5WTHN_GTON_PPLTN_MIN'           │ 'string' │ '1900'                                                                                                                                                                                                                                                                          │
+│ 91      │ 'LIVE_SUB_PPLTN.SUB_5WTHN_GTON_PPLTN_MAX'           │ 'string' │ '2000'                                                                                                                                                                                                                                                                          │
+│ 92      │ 'LIVE_SUB_PPLTN.SUB_5WTHN_GTOFF_PPLTN_MIN'          │ 'string' │ '1600'                                                                                                                                                                                                                                                                          │
+│ 93      │ 'LIVE_SUB_PPLTN.SUB_5WTHN_GTOFF_PPLTN_MAX'          │ 'string' │ '1700'                                                                                                                                                                                                                                                                          │
+│ 94      │ 'LIVE_SUB_PPLTN.SUB_STN_CNT'                        │ 'string' │ '4'                                                                                                                                                                                                                                                                             │
+│ 95      │ 'LIVE_SUB_PPLTN.SUB_STN_TIME'                       │ 'string' │ '20260602'                                                                                                                                                                                                                                                                      │
+│ 96      │ 'BUS_STN_STTS'                                      │ 'array'  │ 'length=43'                                                                                                                                                                                                                                                                     │
+│ 97      │ 'BUS_STN_STTS[]'                                    │ 'object' │ 'keys=BUS_RESULT_MSG, BUS_STN_ID, BUS_ARS_ID, BUS_STN_NM, BUS_STN_X, BUS_STN_Y'                                                                                                                                                                                                 │
+│ 98      │ 'BUS_STN_STTS[].BUS_RESULT_MSG'                     │ 'string' │ '정상 호출되었습니다.'                                                                                                                                                                                                                                                          │
+│ 99      │ 'BUS_STN_STTS[].BUS_STN_ID'                         │ 'string' │ '121000009'                                                                                                                                                                                                                                                                     │
+│ 100     │ 'BUS_STN_STTS[].BUS_ARS_ID'                         │ 'string' │ '22009'                                                                                                                                                                                                                                                                         │
+│ 101     │ 'BUS_STN_STTS[].BUS_STN_NM'                         │ 'string' │ '신분당선강남역'                                                                                                                                                                                                                                                                │
+│ 102     │ 'BUS_STN_STTS[].BUS_STN_X'                          │ 'string' │ '127.0285365859'                                                                                                                                                                                                                                                                │
+│ 103     │ 'BUS_STN_STTS[].BUS_STN_Y'                          │ 'string' │ '37.4958485587'                                                                                                                                                                                                                                                                 │
+│ 104     │ 'LIVE_BUS_PPLTN'                                    │ 'object' │ 'keys=BUS_ACML_GTON_PPLTN_MIN, BUS_ACML_GTON_PPLTN_MAX, BUS_ACML_GTOFF_PPLTN_MIN, BUS_ACML_GTOFF_PPLTN_MAX, BUS_30WTHN_GTON_PPLTN_MIN, BUS_30WTHN_GTON_PPLTN_MAX, BUS_30WTHN_GTOFF_PPLTN_MIN, BUS_30WTHN_GTOFF_PPLTN_MAX, BUS_10WTHN_GTON_PPLTN_MIN, BUS_10WTHN_GTON_PPLTN_MAX' │
+│ 105     │ 'LIVE_BUS_PPLTN.BUS_ACML_GTON_PPLTN_MIN'            │ 'string' │ '29300'                                                                                                                                                                                                                                                                         │
+│ 106     │ 'LIVE_BUS_PPLTN.BUS_ACML_GTON_PPLTN_MAX'            │ 'string' │ '29400'                                                                                                                                                                                                                                                                         │
+│ 107     │ 'LIVE_BUS_PPLTN.BUS_ACML_GTOFF_PPLTN_MIN'           │ 'string' │ '27500'                                                                                                                                                                                                                                                                         │
+│ 108     │ 'LIVE_BUS_PPLTN.BUS_ACML_GTOFF_PPLTN_MAX'           │ 'string' │ '27600'                                                                                                                                                                                                                                                                         │
+│ 109     │ 'LIVE_BUS_PPLTN.BUS_30WTHN_GTON_PPLTN_MIN'          │ 'string' │ '1800'                                                                                                                                                                                                                                                                          │
+│ 110     │ 'LIVE_BUS_PPLTN.BUS_30WTHN_GTON_PPLTN_MAX'          │ 'string' │ '1900'                                                                                                                                                                                                                                                                          │
+│ 111     │ 'LIVE_BUS_PPLTN.BUS_30WTHN_GTOFF_PPLTN_MIN'         │ 'string' │ '1700'                                                                                                                                                                                                                                                                          │
+│ 112     │ 'LIVE_BUS_PPLTN.BUS_30WTHN_GTOFF_PPLTN_MAX'         │ 'string' │ '1800'                                                                                                                                                                                                                                                                          │
+│ 113     │ 'LIVE_BUS_PPLTN.BUS_10WTHN_GTON_PPLTN_MIN'          │ 'string' │ '750'                                                                                                                                                                                                                                                                           │
+│ 114     │ 'LIVE_BUS_PPLTN.BUS_10WTHN_GTON_PPLTN_MAX'          │ 'string' │ '800'                                                                                                                                                                                                                                                                           │
+│ 115     │ 'LIVE_BUS_PPLTN.BUS_10WTHN_GTOFF_PPLTN_MIN'         │ 'string' │ '750'                                                                                                                                                                                                                                                                           │
+│ 116     │ 'LIVE_BUS_PPLTN.BUS_10WTHN_GTOFF_PPLTN_MAX'         │ 'string' │ '800'                                                                                                                                                                                                                                                                           │
+│ 117     │ 'LIVE_BUS_PPLTN.BUS_5WTHN_GTON_PPLTN_MIN'           │ 'string' │ '250'                                                                                                                                                                                                                                                                           │
+│ 118     │ 'LIVE_BUS_PPLTN.BUS_5WTHN_GTON_PPLTN_MAX'           │ 'string' │ '300'                                                                                                                                                                                                                                                                           │
+│ 119     │ 'LIVE_BUS_PPLTN.BUS_5WTHN_GTOFF_PPLTN_MIN'          │ 'string' │ '200'                                                                                                                                                                                                                                                                           │
+└─────────┴─────────────────────────────────────────────────────┴──────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘

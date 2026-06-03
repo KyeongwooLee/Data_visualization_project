@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
+		"preprocess": "node processWeatherProfiles.js",
 		"build": "vite build",
 		"lint": "eslint .",
 		"preview": "vite preview"
