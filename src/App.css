@@ -21,6 +21,8 @@ body {
 }
 
 .header-bar {
+    position: relative;
+    z-index: 200;
     display: flex;
     justify-content: space-between;
     align-items: center;
